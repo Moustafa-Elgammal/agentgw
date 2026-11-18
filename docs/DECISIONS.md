@@ -158,3 +158,38 @@ agent level retry safe, because a retry is a new call with a new key. Safe retry
 `outcome_unknown` is the agent's job: read the game state first. Letting the agent supply a
 stable key so a backend can de-duplicate real retries is possible later, but it changes the
 protocol and needs its own entry first.
+
+## Public endpoint hardening (M3)
+
+Three weaknesses in the authorization server's public endpoints, fixed together.
+
+- **Registration is bounded.** `POST /register` is limited per client address (default 10 per
+  hour, `ServerConfig.RegisterPerHour`, 429 with `Retry-After` and an RFC 7591 style error body).
+  Every attempt counts, valid or not, as with the ticket limiter. The server also refuses to
+  register more than `MaxClients` clients (default 10000, answered 503). The `auth.Store`
+  interface does not grow a count method, because another store implementation exists, so the
+  cap is counted in the `Server`. **Limitation:** the count is process local. It starts at zero
+  after a restart, even if the store already holds clients, and each replica counts alone. It
+  bounds growth per process, it is not a global quota. A store backed count can replace it when
+  the interface next changes. Registration is also stricter: duplicate redirect URIs and URIs
+  over 2048 bytes are rejected, and `client_name` must be printable text (no control, format or
+  bidi override characters, valid UTF-8). The name is shown on the consent page, so this limits
+  spoofing of what the player reads.
+- **One client address helper.** The ticket limiter and the registration limiter both key on
+  `Server.clientAddr`. By default that is the host of `RemoteAddr`. `ServerConfig.ClientIPHeader`
+  (for example `X-Forwarded-For` or `X-Real-IP`) makes it the first comma separated value of that
+  header. A missing or unparsable value falls back to `RemoteAddr`. The header is trusted
+  blindly, so it must be set only behind a proxy that overwrites it. Otherwise any client picks
+  its own address and evades the limits.
+- **CORS is narrow.** `Access-Control-Allow-Origin: *`, never `Allow-Credentials`, and OPTIONS
+  preflights on: `GET /.well-known/oauth-authorization-server`, `GET
+  /.well-known/oauth-protected-resource` (and `/mcp`), `POST /register`, `POST /token`. Methods
+  and headers are exactly what each needs (`Content-Type` for the two POSTs, none for metadata;
+  `Authorization` is not needed anywhere), preflight cache 10 minutes. `/register` and `/token`
+  expose `Retry-After`. `*` is acceptable there because the metadata is public, registered
+  clients are public clients whose codes are protected by PKCE, and these endpoints use no
+  cookies or other ambient credentials, so a page from any origin gains nothing it could not do
+  with curl. It is not acceptable on `/authorize` (a consent page for a player, framing and
+  cross origin reads are what we defend against), on `/v1/studio/*` (signed studio calls), or on
+  the MCP endpoint (bearer tokens for an agent, and a browser page must not be able to drive it
+  unprompted). Those get no CORS headers, and tests prove it.

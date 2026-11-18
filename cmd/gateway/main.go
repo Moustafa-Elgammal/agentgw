@@ -65,6 +65,9 @@ func main() {
 		publicURL    = flag.String("public-url", "http://127.0.0.1:8080", "public base URL of this gateway: the OAuth issuer, and the MCP resource is <public-url>/mcp")
 		devAuth      = flag.Bool("dev-auth", false, "DEV ONLY: trust the X-Dev-Player header and serve the dev HTTP API instead of requiring OAuth tokens")
 		studioKeyID  = flag.String("studio-key-id", "dev-1", "key id the studio backend uses to sign link ticket requests (secret: AGENTGW_SIGNING_SECRET)")
+		registerHour = flag.Int("register-per-hour", 10, "client registrations allowed per hour per client address (negative disables)")
+		maxClients   = flag.Int("max-clients", 10000, "most OAuth clients this process will register (negative disables)")
+		clientIPHdr  = flag.String("client-ip-header", "", "trusted header carrying the client address, for example X-Forwarded-For. Set it ONLY behind a proxy that overwrites it, or clients can evade rate limits")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	flag.Parse()
@@ -147,6 +150,7 @@ func main() {
 		as := auth.NewServer(auth.ServerConfig{
 			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant,
 			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret),
+			RegisterPerHour: *registerHour, MaxClients: *maxClients, ClientIPHeader: *clientIPHdr,
 		})
 		mux.Handle("/mcp", mcpserver.Handler(svc, rs.Authenticate))
 		mux.Handle("GET /.well-known/oauth-protected-resource", rs.MetadataHandler(issuer))

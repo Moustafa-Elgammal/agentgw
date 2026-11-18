@@ -89,8 +89,9 @@ prunes expired OAuth rows hourly, and mounts `StudioHandler`.
 
 Studio-signed confirmation endpoints (`confirm.StudioHandler`) are the player's approve and deny path
 in OAuth mode. Still open: OIDC login at consent (library choice pending), a shared replay cache for
-all studio-signed endpoints (only ticket minting has one), CORS for browser
-based clients, a bound on `/register`. MCP result
+all studio-signed endpoints (only ticket minting has one). Registration limits, trusted client
+address header and narrow CORS are done (`--register-per-hour`, `--max-clients`,
+`--client-ip-header`; limiters are per process until M6). MCP result
 polish is done: results carry `structuredContent` and a permissive `outputSchema`, and a cancelled
 call stops the backend request (see `docs/DECISIONS.md`).
 

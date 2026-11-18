@@ -60,7 +60,8 @@ header-trusting dev API is not mounted.
   with a signed request (`agentsig`, replays refused). Guessing is limited to 10 attempts a minute
   per address, and every failure looks the same.
 - Known limits: the authorization server state is in memory (lost on restart), the ticket
-  limiter is per process, and dynamic client registration is unauthenticated and unbounded.
+  limiter is per process, and dynamic client registration is unauthenticated (rate limited and
+  capped, see below, but the cap is per process).
 
 ## Planned
 
@@ -70,3 +71,18 @@ envelope encryption for signing secrets, circuit breaker per backend.
 ## Reporting
 
 See [SECURITY.md](../SECURITY.md).
+
+## Public OAuth endpoint hardening (M3)
+
+- `POST /register` is limited to 10 registrations per hour per address (every attempt counts),
+  and the process registers at most 10000 clients. The cap is process local: it resets on restart
+  and is not shared between replicas. Redirect URIs must be unique and at most 2048 bytes, and
+  `client_name` must be printable text.
+- **Client address behind a proxy.** The ticket limiter and the registration limiter key on the
+  connection's address by default, so behind a reverse proxy every player shares one budget. The
+  `ClientIPHeader` setting makes them use the first value of a header such as `X-Forwarded-For`.
+  Set it ONLY when the proxy overwrites that header on every request and clients cannot reach the
+  gateway directly. Otherwise any client can choose its own address and evade the limits entirely.
+  A missing or unparsable header falls back to the connection address.
+- CORS (`Access-Control-Allow-Origin: *`, no credentials) exists only on the discovery metadata,
+  `/register` and `/token`. `/authorize`, `/v1/studio/*` and `/mcp` send no CORS headers.

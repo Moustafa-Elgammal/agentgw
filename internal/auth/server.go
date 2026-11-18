@@ -6,10 +6,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
 )
@@ -26,13 +30,36 @@ type ServerConfig struct {
 	StudioKeyID  string
 	StudioSecret []byte
 
+	// RegisterPerHour limits POST /register per client address. 0 means 10, negative disables.
+	RegisterPerHour int
+	// MaxClients caps how many clients this process will register. 0 means 10000, negative
+	// disables. The count is process local (see Server.registered), so it resets on restart.
+	MaxClients int
+
+	// ClientIPHeader names a header, such as X-Forwarded-For or X-Real-IP, whose first value is
+	// used as the client address by the ticket limiter and the registration limiter. Empty means
+	// use the connection's RemoteAddr.
+	//
+	// SECURITY: set this ONLY when the gateway sits behind a reverse proxy that overwrites the
+	// header on every request. If clients can reach the gateway directly, or the proxy appends to
+	// a client supplied value, any client can choose its own address and evade every limit.
+	// A missing or unparsable value falls back to RemoteAddr.
+	ClientIPHeader string
+
 	Now func() time.Time // nil means time.Now
 }
 
 // Server is the embedded authorization server.
 type Server struct {
 	cfg      ServerConfig
-	attempts *limiter
+	attempts *limiter // ticket guessing, per client address
+	regLimit *limiter // POST /register, per client address; nil when disabled
+
+	// registered counts clients registered by this process. auth.Store has no count method and
+	// must not grow one for this, so the cap is process local: it resets on restart and each
+	// replica counts alone. It bounds growth per process, it is not a global quota.
+	regMu      sync.Mutex
+	registered int
 
 	seenMu sync.Mutex
 	seen   map[string]time.Time // signed ticket requests already honoured, to refuse replays
@@ -44,17 +71,34 @@ func NewServer(cfg ServerConfig) *Server {
 		cfg.Now = time.Now
 	}
 	cfg.Issuer = strings.TrimRight(cfg.Issuer, "/")
-	return &Server{cfg: cfg, attempts: newLimiter(10, time.Minute, cfg.Now), seen: map[string]time.Time{}}
+	if cfg.RegisterPerHour == 0 {
+		cfg.RegisterPerHour = 10
+	}
+	if cfg.MaxClients == 0 {
+		cfg.MaxClients = 10000
+	}
+	s := &Server{cfg: cfg, attempts: newLimiter(10, time.Minute, cfg.Now), seen: map[string]time.Time{}}
+	if cfg.RegisterPerHour > 0 {
+		s.regLimit = newLimiter(cfg.RegisterPerHour, time.Hour, cfg.Now)
+	}
+	return s
 }
 
 // Handler serves the authorization server endpoints.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.metadata)
-	mux.HandleFunc("POST /register", s.register)
+	mux.Handle("GET /.well-known/oauth-authorization-server", cors("", http.HandlerFunc(s.metadata)))
+	mux.Handle("OPTIONS /.well-known/oauth-authorization-server", preflight("GET", ""))
+	// The protected resource metadata itself is served by ResourceServer.MetadataHandler, which
+	// the caller mounts for GET. Preflights for it land here because this handler is mounted at "/".
+	mux.Handle("OPTIONS /.well-known/oauth-protected-resource", preflight("GET", ""))
+	mux.Handle("OPTIONS /.well-known/oauth-protected-resource/mcp", preflight("GET", ""))
+	mux.Handle("POST /register", cors("Retry-After", http.HandlerFunc(s.register)))
+	mux.Handle("OPTIONS /register", preflight("POST", "Content-Type"))
 	mux.HandleFunc("GET /authorize", s.authorizeForm)
 	mux.HandleFunc("POST /authorize", s.authorizeSubmit)
-	mux.HandleFunc("POST /token", s.token)
+	mux.Handle("POST /token", cors("", http.HandlerFunc(s.token)))
+	mux.Handle("OPTIONS /token", preflight("POST", "Content-Type"))
 	mux.HandleFunc("POST /v1/studio/link-tickets", s.mintTicket)
 	return mux
 }
@@ -78,6 +122,14 @@ func (s *Server) metadata(w http.ResponseWriter, _ *http.Request) {
 
 // register is dynamic client registration (RFC 7591) for public clients.
 func (s *Server) register(w http.ResponseWriter, r *http.Request) {
+	// Every attempt counts, valid or not, like the ticket limiter.
+	if s.regLimit != nil {
+		if ok, wait := s.regLimit.allowRetry(s.clientAddr(r)); !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int((wait+time.Second-1)/time.Second)))
+			oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable", "too many registrations from this address, try again later")
+			return
+		}
+	}
 	var req struct {
 		ClientName   string   `json:"client_name"`
 		RedirectURIs []string `json:"redirect_uris"`
@@ -92,18 +144,37 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "client_name is required, at most 100 characters")
 		return
 	}
+	if !printableText(name) {
+		oauthError(w, http.StatusBadRequest, "invalid_client_metadata", "client_name must be printable text without control characters")
+		return
+	}
 	if len(req.RedirectURIs) == 0 || len(req.RedirectURIs) > 10 {
 		oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "give between 1 and 10 redirect_uris")
 		return
 	}
+	seen := map[string]bool{}
 	for _, u := range req.RedirectURIs {
+		if len(u) > maxRedirectURI {
+			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "a redirect_uri is longer than 2048 bytes")
+			return
+		}
 		if err := validRedirectURI(u); err != nil {
 			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", err.Error())
 			return
 		}
+		if seen[u] {
+			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", "redirect_uris must not contain duplicates")
+			return
+		}
+		seen[u] = true
+	}
+	if !s.reserveClient() {
+		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "this server is not accepting new client registrations")
+		return
 	}
 	c := Client{ID: NewID(), Name: name, RedirectURIs: req.RedirectURIs, CreatedAt: s.cfg.Now()}
 	if err := s.cfg.Store.RegisterClient(r.Context(), c); err != nil {
+		s.releaseClient()
 		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "try again later")
 		return
 	}
@@ -113,6 +184,39 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		"grant_types":                []string{"authorization_code", "refresh_token"},
 		"response_types":             []string{"code"},
 	})
+}
+
+const maxRedirectURI = 2048
+
+// printableText reports whether s is valid UTF-8 made only of printable characters
+// (no control, format or bidi override characters).
+func printableText(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// reserveClient takes one slot of the client cap. See Server.registered for its limits.
+func (s *Server) reserveClient() bool {
+	s.regMu.Lock()
+	defer s.regMu.Unlock()
+	if s.cfg.MaxClients > 0 && s.registered >= s.cfg.MaxClients {
+		return false
+	}
+	s.registered++
+	return true
+}
+
+func (s *Server) releaseClient() {
+	s.regMu.Lock()
+	s.registered--
+	s.regMu.Unlock()
 }
 
 // validRedirectURI accepts https URLs and http URLs on a literal loopback address
@@ -270,6 +374,13 @@ func newLimiter(max int, window time.Duration, now func() time.Time) *limiter {
 
 // allow records an attempt and reports whether it is within the budget.
 func (l *limiter) allow(key string) bool {
+	ok, _ := l.allowRetry(key)
+	return ok
+}
+
+// allowRetry is allow, and when the attempt is refused it also returns how long until the
+// oldest counted attempt leaves the window.
+func (l *limiter) allowRetry(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
@@ -281,7 +392,7 @@ func (l *limiter) allow(key string) bool {
 	}
 	if len(kept) >= l.max {
 		l.hits[key] = kept
-		return false
+		return false, kept[0].Add(l.window).Sub(now)
 	}
 	l.hits[key] = append(kept, now)
 	if len(l.hits) > 10000 { // bound memory: drop idle keys
@@ -291,7 +402,20 @@ func (l *limiter) allow(key string) bool {
 			}
 		}
 	}
-	return true
+	return true, 0
+}
+
+// clientAddr is the address the limiters key on. With ClientIPHeader unset it is the host of
+// RemoteAddr. With it set, it is the first comma separated value of that header, if it parses as
+// an IP address, else RemoteAddr. See ServerConfig.ClientIPHeader for the trust requirement.
+func (s *Server) clientAddr(r *http.Request) string {
+	if h := s.cfg.ClientIPHeader; h != "" {
+		first, _, _ := strings.Cut(r.Header.Get(h), ",")
+		if a, err := netip.ParseAddr(strings.TrimSpace(first)); err == nil {
+			return a.Unmap().WithZone("").String()
+		}
+	}
+	return clientIP(r)
 }
 
 func clientIP(r *http.Request) string {

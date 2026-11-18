@@ -72,6 +72,12 @@ func (rs *ResourceServer) MetadataHandler(issuer string) http.Handler {
 		"resource_name":            "agentgw game gateway",
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Public metadata, readable by browser based clients. No credentials are involved.
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodOptions {
+			preflight("GET", "").ServeHTTP(w, r)
+			return
+		}
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return

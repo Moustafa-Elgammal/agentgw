@@ -108,6 +108,29 @@ func TestExpiredTokenIsRejected(t *testing.T) {
 	}
 }
 
+func TestMetadataCORS(t *testing.T) {
+	rs, _, _ := rsWith(t)
+	h := rs.MetadataHandler("https://gw.example")
+	tests := []struct {
+		method     string
+		wantStatus int
+		wantOrigin string
+		wantMethod string
+	}{
+		{"GET", 200, "*", ""},
+		{"OPTIONS", 204, "*", "GET"},
+	}
+	for _, tc := range tests {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(tc.method, "/", nil))
+		if w.Code != tc.wantStatus || w.Header().Get("Access-Control-Allow-Origin") != tc.wantOrigin ||
+			w.Header().Get("Access-Control-Allow-Methods") != tc.wantMethod ||
+			w.Header().Get("Access-Control-Allow-Credentials") != "" {
+			t.Errorf("%s: %d %v", tc.method, w.Code, w.Header())
+		}
+	}
+}
+
 func TestMetadata(t *testing.T) {
 	rs, _, _ := rsWith(t)
 	srv := httptest.NewServer(rs.MetadataHandler("https://gw.example"))

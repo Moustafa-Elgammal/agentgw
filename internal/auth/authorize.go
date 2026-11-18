@@ -107,7 +107,7 @@ func (s *Server) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Guessing a ticket is the only attack on this form, so every submission counts.
-	if !s.attempts.allow(clientIP(r)) {
+	if !s.attempts.allow(s.clientAddr(r)) {
 		w.Header().Set("Retry-After", "60")
 		s.render(w, http.StatusTooManyRequests, req, "Too many attempts. Wait a minute and try again.")
 		return
