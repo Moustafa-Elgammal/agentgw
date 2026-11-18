@@ -20,6 +20,7 @@ import (
 // Token lifetimes and limits.
 const (
 	CodeTTL    = 60 * time.Second
+	TicketTTL  = 5 * time.Minute
 	AccessTTL  = 15 * time.Minute
 	RefreshTTL = 30 * 24 * time.Hour
 )
@@ -75,6 +76,11 @@ var (
 
 // Store keeps OAuth state. Every method must be safe for concurrent use.
 type Store interface {
+	// PutTicket stores a link ticket (hashed) that proves a logged-in player to the consent page.
+	PutTicket(ctx context.Context, hash, tenant, player string, expires time.Time) error
+	// TakeTicket redeems a ticket exactly once. Unknown, used and expired are ErrNotFound.
+	TakeTicket(ctx context.Context, hash string) (tenant, player string, err error)
+
 	RegisterClient(ctx context.Context, c Client) error
 	// Client returns ErrNotFound for an unknown id.
 	Client(ctx context.Context, id string) (Client, error)

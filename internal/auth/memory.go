@@ -16,6 +16,13 @@ type Memory struct {
 	grants  map[string]*grantEntry
 	access  map[string]tokenEntry
 	refresh map[string]*refreshEntry
+	tickets map[string]*ticketEntry
+}
+
+type ticketEntry struct {
+	tenant, player string
+	expires        time.Time
+	used           bool
 }
 
 type codeEntry struct {
@@ -45,7 +52,27 @@ func NewMemory(now func() time.Time) *Memory {
 		now = time.Now
 	}
 	return &Memory{now: now, clients: map[string]Client{}, codes: map[string]*codeEntry{},
-		grants: map[string]*grantEntry{}, access: map[string]tokenEntry{}, refresh: map[string]*refreshEntry{}}
+		grants: map[string]*grantEntry{}, access: map[string]tokenEntry{}, refresh: map[string]*refreshEntry{}, tickets: map[string]*ticketEntry{}}
+}
+
+// PutTicket implements Store.
+func (m *Memory) PutTicket(_ context.Context, hash, tenant, player string, expires time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.tickets[hash] = &ticketEntry{tenant: tenant, player: player, expires: expires}
+	return nil
+}
+
+// TakeTicket implements Store.
+func (m *Memory) TakeTicket(_ context.Context, hash string) (string, string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.tickets[hash]
+	if !ok || e.used || !m.now().Before(e.expires) {
+		return "", "", ErrNotFound
+	}
+	e.used = true
+	return e.tenant, e.player, nil
 }
 
 // RegisterClient implements Store.

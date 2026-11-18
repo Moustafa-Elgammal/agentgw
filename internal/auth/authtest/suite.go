@@ -49,6 +49,7 @@ func Run(t *testing.T, f Factory) {
 		fn   func(t *testing.T, f Factory)
 	}{
 		{"ClientsRegisterAndLookUp", clients},
+		{"TicketsAreSingleUseAndExpire", tickets},
 		{"CodeIsSingleUse", codeSingleUse},
 		{"CodeExpires", codeExpires},
 		{"ConcurrentTakeCodeHasOneWinner", codeConcurrent},
@@ -86,6 +87,41 @@ func clients(t *testing.T, f Factory) {
 	}
 	_, err = s.Client(ctx, "nope")
 	mustNotFound(t, err, "unknown client")
+}
+
+func tickets(t *testing.T, f Factory) {
+	c := newClock()
+	s := f(t, c.now)
+	_ = s.PutTicket(ctx, "th", "t", "alice", c.now().Add(auth.TicketTTL))
+	tenant, player, err := s.TakeTicket(ctx, "th")
+	if err != nil || tenant != "t" || player != "alice" {
+		t.Fatalf("take = %q %q %v", tenant, player, err)
+	}
+	_, _, err = s.TakeTicket(ctx, "th")
+	mustNotFound(t, err, "second redemption")
+	_, _, err = s.TakeTicket(ctx, "unknown")
+	mustNotFound(t, err, "unknown ticket")
+	_ = s.PutTicket(ctx, "old", "t", "alice", c.now().Add(auth.TicketTTL))
+	c.advance(auth.TicketTTL + time.Second)
+	_, _, err = s.TakeTicket(ctx, "old")
+	mustNotFound(t, err, "expired ticket")
+
+	_ = s.PutTicket(ctx, "race", "t", "alice", c.now().Add(auth.TicketTTL))
+	var wg sync.WaitGroup
+	var won atomic.Int32
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, _, err := s.TakeTicket(ctx, "race"); err == nil {
+				won.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if won.Load() != 1 {
+		t.Fatalf("%d callers redeemed one ticket, want exactly 1", won.Load())
+	}
 }
 
 func code(c *clock, hash string) auth.Code {
