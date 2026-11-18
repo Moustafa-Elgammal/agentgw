@@ -18,8 +18,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"sort"
+	"time"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
@@ -72,8 +75,13 @@ func (s *Service) Tools() []core.Tool {
 // expected failure; those come back as a Result the agent can read.
 func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw json.RawMessage) core.Result {
 	argsHash := audit.HashArgs(raw)
+	// Bookkeeping must survive the caller going away: a cancelled request still has to release
+	// its reservation and leave its audit event. It keeps the values of ctx but not its
+	// cancellation, and has its own deadline so a stuck store cannot hang the call forever.
+	bg, stop := context.WithTimeout(context.WithoutCancel(ctx), bookkeepingTimeout)
+	defer stop()
 	record := func(t core.Tool, outcome, code string) {
-		s.audit.Record(ctx, audit.Event{
+		s.audit.Record(bg, audit.Event{
 			Time: nowUTC(), Tenant: p.TenantID, Player: p.PlayerID, Tool: name,
 			Tier: string(t.Tier), Outcome: outcome, Code: code, ArgsSHA: argsHash,
 		})
@@ -120,7 +128,7 @@ func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw j
 	}
 	settleClaim := func(ok bool) {
 		if claim != "" {
-			_ = s.confirm.Settle(ctx, claim, ok) // a failed call returns the approval to the player
+			_ = s.confirm.Settle(bg, claim, ok) // a failed call returns the approval to the player
 		}
 	}
 
@@ -138,12 +146,17 @@ func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw j
 
 	result, err := s.conn.Call(ctx, p, t, args, newIdempotencyKey())
 	if err != nil {
-		_ = s.policy.Settle(ctx, res, false)
+		_ = s.policy.Settle(bg, res, false)
 		settleClaim(false)
+		if unknown := outcomeUnknown(ctx, err); unknown {
+			record(t, "error", "outcome_unknown")
+			return core.Denied("outcome_unknown", "the call was cut off before the game answered (cancelled or timed out). "+
+				"The game may or may not have applied it. Check the game state before trying again.")
+		}
 		record(t, "error", "backend_unavailable")
 		return core.Denied("backend_unavailable", "the game could not be reached, nothing was changed")
 	}
-	_ = s.policy.Settle(ctx, res, result.OK)
+	_ = s.policy.Settle(bg, res, result.OK)
 	settleClaim(result.OK)
 	if result.OK {
 		record(t, "ok", "")
@@ -151,6 +164,20 @@ func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw j
 		record(t, "denied", result.Code)
 	}
 	return result
+}
+
+// bookkeepingTimeout bounds release, settle and audit work done after the call itself.
+const bookkeepingTimeout = 5 * time.Second
+
+// outcomeUnknown reports whether a connector error happened after the request may have
+// reached the game: the caller cancelled, or the request timed out in flight. A refused
+// connection is not ambiguous, nothing was sent.
+func outcomeUnknown(ctx context.Context, err error) bool {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 func newIdempotencyKey() string {

@@ -81,8 +81,9 @@ Next, M3 auth: protected resource metadata, token validation (audience bound per
 authorization server with link tickets and consent, grants and revocation. The dev `X-Dev-Player`
 header and `X-Dev-Admin` stay until real auth replaces them. Several M3 choices are open in
 `docs/DECISIONS.md` (embed an authorization server or use an external one, player identity at
-consent); decide those with the user before building. Open MCP polish: `structuredContent`
-for results, request cancellation.
+consent); decide those with the user before building. MCP result polish is done: results carry
+`structuredContent` and a permissive `outputSchema`, and a cancelled call stops the backend request
+(see `docs/DECISIONS.md`).
 
 ## Testing against a game
 

@@ -104,3 +104,57 @@ and single-process use, Postgres (pgx v5) for shared use. Both pass one contract
 - Per-player tool sets work with `mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server, nil)`: the factory sees each request's headers and returns a server with that player's tools. With the default stateful mode the factory runs when a session is created, so identity is fixed per session. Principal must come from the validated token, not from a header, once M3 lands.
 - A call to a tool that was not registered for that player is rejected by the SDK.
 - Test teardown: close client sessions before `httptest.Server.Close`, or open SSE streams block it.
+
+## MCP results: structuredContent, outputSchema, cancellation
+
+**structuredContent.** Every result carries the same body twice: a JSON text block (MCP says to
+keep it) and `structuredContent` (`ok`, optional `code`, `message`, `data`). A test decodes both
+with the official client and checks they are equal for success with data, for a denial with a
+code and for a cap denial.
+
+**outputSchema: declared, one permissive schema for all tools.** In go-sdk v1.8.0 the raw
+`Server.AddTool` does not validate results ("Validating the result against the output schema is
+the caller's responsibility"), and the Go client does not either, so the schema is
+documentation for the Go ecosystem. Other clients may validate `structuredContent` against it.
+A denial has no `data` and is returned with `isError`, so a schema that required `data` would
+make strict clients reject every error. The schema therefore requires only `ok` (boolean), types
+`code` and `message` as strings and leaves `data` unconstrained (backend data, untrusted). It
+covers both shapes. Tightening it later (for example per tool `data` shapes) is a compatibility
+change and needs an entry here first.
+
+**Cancellation.** The context chain is: MCP handler ctx, `Service.Call`, `connector.HTTP.Call`
+(`http.NewRequestWithContext`). Cancelling it aborts the backend request. The problem was
+getting the signal in. `StreamableHTTPOptions.PropagateRequestCancellation` only applies to
+requests using protocol version 2026-07-28 or later ("Requests using older protocol versions are
+unaffected"), and the pinned SDK computes it as `usesNewProtocol && ...`. This server speaks the
+older versions today, and in stateless mode the client's `notifications/cancelled` is a separate
+POST that reaches a different, new server instance, so it cannot find the in-flight request.
+A test showed the backend request kept running until its own timeout. We therefore leave the
+option off (revisit when the client base moves to the new protocol) and the tool handler joins
+its context with the HTTP request context (`joinCancel`). Stateless mode has one POST per call,
+so the request context ends exactly when the client disconnects or gives up.
+
+Bookkeeping after a cancel: the release of the reservation, the confirmation claim settle and
+the audit event use a context detached from cancellation (values kept) with a 5 second
+deadline. Otherwise a networked store (Redis, Postgres) would refuse the release on a cancelled
+context and leak the cap, and the audit event would be lost. A failed or cancelled call never
+starts a cooldown (unchanged rule). Exactly one audit event is written per call.
+
+**What a cancel means for a call that reached the backend.** The outcome is ambiguous: the
+backend may or may not have applied the action. The gateway cannot know. It releases the
+reservation (so the daily cap is not burned by a call that may have done nothing) and answers
+`outcome_unknown`: "the call was cut off before the game answered (cancelled or timed out). The
+game may or may not have applied it. Check the game state before trying again." The audit event
+is outcome `error`, code `outcome_unknown`. The same code is used when the connector's own
+timeout fires mid-request. A refused connection stays `backend_unavailable` ("nothing was
+changed") because nothing was sent. Releasing means the cap can be claimed again even if the
+backend did apply the action, so the cap can be overshot by at most the amount of the cut off
+calls. We accept that over locking the cap for an unknown outcome.
+
+**What the idempotency key is for.** Each gateway attempt sends one fresh key
+(`X-AG-Idempotency-Key`). It lets a backend de-duplicate transport level repeats of that same
+attempt (a proxy or HTTP client retrying a request that already arrived). It does not make an
+agent level retry safe, because a retry is a new call with a new key. Safe retry after
+`outcome_unknown` is the agent's job: read the game state first. Letting the agent supply a
+stable key so a backend can de-duplicate real retries is possible later, but it changes the
+protocol and needs its own entry first.

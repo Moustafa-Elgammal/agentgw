@@ -49,7 +49,7 @@ type ctxKey struct{}
 func Handler(svc *gateway.Service, auth Authenticator) http.Handler {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		p, _ := r.Context().Value(ctxKey{}).(core.Principal)
-		return newServer(svc, p)
+		return newServer(svc, p, r.Context())
 	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +68,12 @@ func Handler(svc *gateway.Service, auth Authenticator) http.Handler {
 
 // newServer builds the tool set one principal may see. Sensitive tools are not
 // listed: they are disabled in v1, and an agent should not be offered them.
-func newServer(svc *gateway.Service, p core.Principal) *mcp.Server {
+//
+// reqCtx is the context of the HTTP request that carries the call. Stateless mode has one
+// request per call, so when it ends (the client disconnected or gave up) the call is
+// abandoned. The SDK does not tie the handler context to it for the protocol versions
+// this server speaks (see DECISIONS.md), so the tool handler joins the two itself.
+func newServer(svc *gateway.Service, p core.Principal, reqCtx context.Context) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "agentgw", Version: "0.1.0"}, nil)
 	for _, t := range svc.Tools() {
 		if t.Tier == core.TierSensitive || !p.Scope.Allows(t.Tier) {
@@ -76,20 +81,40 @@ func newServer(svc *gateway.Service, p core.Principal) *mcp.Server {
 		}
 		name := t.Name
 		s.AddTool(&mcp.Tool{
-			Name:        name,
-			Description: t.Description,
-			InputSchema: InputSchema(t),
-			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: !t.Tier.IsAction()},
+			Name:         name,
+			Description:  t.Description,
+			InputSchema:  InputSchema(t),
+			OutputSchema: outputSchema,
+			Annotations:  &mcp.ToolAnnotations{ReadOnlyHint: !t.Tier.IsAction()},
 		}, func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			ctx, stop := joinCancel(ctx, reqCtx)
+			defer stop()
 			return toResult(svc.Call(ctx, p, name, req.Params.Arguments)), nil
 		})
 	}
 	return s
 }
 
+// outputSchema is one permissive schema shared by every tool. It covers both the success
+// and the denial shape, because a denial is returned with isError and a body that has a code
+// and no data. Strict clients that validate structuredContent therefore never reject an
+// error result. Only "ok" is required; "data" is backend data and may be any JSON value.
+var outputSchema = map[string]any{
+	"type": "object",
+	"properties": map[string]any{
+		"ok":      map[string]any{"type": "boolean"},
+		"code":    map[string]any{"type": "string"},
+		"message": map[string]any{"type": "string"},
+		"data":    map[string]any{},
+	},
+	"required": []string{"ok"},
+}
+
 // toResult maps a gateway result onto MCP. Expected failures become tool
 // errors (isError) with a machine-readable code, so the agent can read them and
-// correct itself. Backend data is passed through as text and stays untrusted.
+// correct itself. The same body is sent as a JSON text block (which MCP says
+// to keep) and as structuredContent. Backend data is passed through unchanged
+// and stays untrusted.
 func toResult(r core.Result) *mcp.CallToolResult {
 	body := map[string]any{"ok": r.OK}
 	if r.Code != "" {
@@ -101,9 +126,21 @@ func toResult(r core.Result) *mcp.CallToolResult {
 	if len(r.Data) > 0 {
 		body["data"] = json.RawMessage(r.Data)
 	}
-	text, _ := json.Marshal(body)
-	return &mcp.CallToolResult{
-		IsError: !r.OK,
-		Content: []mcp.Content{&mcp.TextContent{Text: string(text)}},
+	text, err := json.Marshal(body)
+	if err != nil { // only possible if a connector returned data that is not valid JSON
+		return toResult(core.Denied("bad_backend_data", "the game returned data the gateway could not read"))
 	}
+	return &mcp.CallToolResult{
+		IsError:           !r.OK,
+		Content:           []mcp.Content{&mcp.TextContent{Text: string(text)}},
+		StructuredContent: body,
+	}
+}
+
+// joinCancel returns a context that keeps ctx's values and is cancelled when either ctx or
+// other is done. Call stop to release it.
+func joinCancel(ctx, other context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	stopAfter := context.AfterFunc(other, cancel)
+	return ctx, func() { stopAfter(); cancel() }
 }
