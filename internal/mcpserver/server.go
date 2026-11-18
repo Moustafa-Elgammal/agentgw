@@ -11,6 +11,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -20,7 +21,8 @@ import (
 )
 
 // Authenticator resolves the principal of an incoming request. A non-nil error
-// means the request is rejected with 401 before any MCP handling.
+// means the request is rejected with 401 before any MCP handling. If the error has
+// a WWWAuthenticate() string method, that value becomes the WWW-Authenticate header.
 type Authenticator func(*http.Request) (core.Principal, error)
 
 // DevAuth trusts the X-Dev-Player header. Development only: pair it with a
@@ -53,6 +55,10 @@ func Handler(svc *gateway.Service, auth Authenticator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, err := auth(r)
 		if err != nil {
+			var ch interface{ WWWAuthenticate() string }
+			if errors.As(err, &ch) {
+				w.Header().Set("WWW-Authenticate", ch.WWWAuthenticate()) // tells an MCP client where to start OAuth
+			}
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
@@ -65,7 +71,7 @@ func Handler(svc *gateway.Service, auth Authenticator) http.Handler {
 func newServer(svc *gateway.Service, p core.Principal) *mcp.Server {
 	s := mcp.NewServer(&mcp.Implementation{Name: "agentgw", Version: "0.1.0"}, nil)
 	for _, t := range svc.Tools() {
-		if t.Tier == core.TierSensitive {
+		if t.Tier == core.TierSensitive || !p.Scope.Allows(t.Tier) {
 			continue
 		}
 		name := t.Name

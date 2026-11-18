@@ -25,12 +25,39 @@ func (t Tier) Valid() bool {
 // IsAction reports whether tools of this tier change game state.
 func (t Tier) IsAction() bool { return t != TierRead }
 
+// Scope is what a player's grant allows the agent to do.
+type Scope string
+
+const (
+	// ScopeCoach allows read tools only.
+	ScopeCoach Scope = "coach"
+	// ScopeOperator allows read tools and action tools.
+	ScopeOperator Scope = "operator"
+)
+
+// Valid reports whether s is a known scope.
+func (s Scope) Valid() bool { return s == ScopeCoach || s == ScopeOperator }
+
+// Allows reports whether a grant with scope s may call a tool of tier t. The empty
+// scope means the caller is not scope-limited (dev auth, tests). Any other unknown
+// value allows nothing, so a corrupt grant fails closed.
+func (s Scope) Allows(t Tier) bool {
+	switch s {
+	case "", ScopeOperator:
+		return true
+	case ScopeCoach:
+		return !t.IsAction()
+	}
+	return false
+}
+
 // Principal identifies who a call is made for. The gateway derives it from the
 // player's authorization, never from tool arguments.
 type Principal struct {
 	TenantID string
 	PlayerID string
 	ClientID string
+	Scope    Scope // what the player's grant allows. Empty means not scope-limited (dev auth).
 }
 
 // Caps are optional per-tool limits. Zero means "not set".

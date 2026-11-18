@@ -198,3 +198,52 @@ func TestMissingPlayerIsRejected(t *testing.T) {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
 	}
 }
+
+func TestScopeDecidesWhichToolsAreListed(t *testing.T) {
+	m, err := manifest.Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), &fakeConn{}, &audit.Memory{})
+	for scope, want := range map[core.Scope]string{core.ScopeCoach: "get_state", core.ScopeOperator: "get_state,sell_resource"} {
+		auth := func(*http.Request) (core.Principal, error) {
+			return core.Principal{TenantID: "t", PlayerID: "p1", Scope: scope}, nil
+		}
+		ts := httptest.NewServer(Handler(svc, auth))
+		res, err := connect(t, ts.URL, "").ListTools(context.Background(), nil)
+		ts.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, tl := range res.Tools {
+			names = append(names, tl.Name)
+		}
+		sort.Strings(names)
+		if strings.Join(names, ",") != want {
+			t.Errorf("scope %s lists %v, want %s", scope, names, want)
+		}
+	}
+}
+
+type challenge struct{}
+
+func (challenge) Error() string { return "bearer token required" }
+func (challenge) WWWAuthenticate() string {
+	return `Bearer resource_metadata="https://gw.example/.well-known/oauth-protected-resource/mcp"`
+}
+
+func TestUnauthorizedCarriesTheChallenge(t *testing.T) {
+	m, _ := manifest.Parse(strings.NewReader(doc))
+	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), &fakeConn{}, &audit.Memory{})
+	ts := httptest.NewServer(Handler(svc, func(*http.Request) (core.Principal, error) { return core.Principal{}, challenge{} }))
+	defer ts.Close()
+	resp, err := http.Post(ts.URL, "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != 401 || !strings.Contains(resp.Header.Get("WWW-Authenticate"), "resource_metadata=") {
+		t.Fatalf("status %d, header %q", resp.StatusCode, resp.Header.Get("WWW-Authenticate"))
+	}
+}

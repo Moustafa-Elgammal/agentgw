@@ -13,6 +13,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"time"
+
+	"github.com/Moustafa-Elgammal/agentgw/internal/core"
 )
 
 // Token lifetimes and limits.
@@ -22,18 +24,14 @@ const (
 	RefreshTTL = 30 * 24 * time.Hour
 )
 
-// Scope is what a grant allows.
-type Scope string
+// Scope is what a grant allows. It is core.Scope, shared with the gateway pipeline.
+type Scope = core.Scope
 
+// The two scopes.
 const (
-	// ScopeCoach allows read tools.
-	ScopeCoach Scope = "coach"
-	// ScopeOperator allows read tools and action tools.
-	ScopeOperator Scope = "operator"
+	ScopeCoach    = core.ScopeCoach
+	ScopeOperator = core.ScopeOperator
 )
-
-// Valid reports whether s is a known scope.
-func (s Scope) Valid() bool { return s == ScopeCoach || s == ScopeOperator }
 
 // Client is a registered OAuth client. All clients are public (no secret).
 type Client struct {

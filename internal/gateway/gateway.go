@@ -85,6 +85,13 @@ func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw j
 		return core.Denied("unknown_tool", fmt.Sprintf("no tool named %q. List tools first.", name))
 	}
 
+	// A coach grant cannot call action tools, whatever the agent was shown. Checked
+	// before Admit: it is a cheap, permanent answer, not a budgeted attempt.
+	if !p.Scope.Allows(t.Tier) {
+		record(t, "denied", "scope_insufficient")
+		return core.Denied("scope_insufficient", fmt.Sprintf("%s changes the game, but the player only allowed read-only coaching. Ask the player to grant operator access.", name))
+	}
+
 	d, err := s.policy.Admit(ctx, p, t)
 	if err != nil { // policy store down: fail closed for actions, and for reads too in M0
 		record(t, "error", "policy_unavailable")
