@@ -37,11 +37,11 @@ require a host install.
 ## Architecture in one minute
 
 Call pipeline in `internal/gateway`: lookup -> Admit (rate limit, counts every attempt) ->
-validate args -> Reserve (cooldown, daily caps) -> connector call (signed) -> Settle
+validate args -> confirmation gate (tools with `confirm`) -> Reserve (cooldown, daily caps) -> connector call (signed) -> Settle
 (keep or release) -> audit. Expected failures are `core.Result{OK:false, Code, Message}`,
 never Go errors. Transport failures are Go errors so callers fail closed.
 
-Packages: `core` (types), `manifest`, `policy`, `connector`, `audit`, `gateway`, `httpapi`
+Packages: `core` (types), `manifest`, `policy`, `confirm`, `connector`, `audit`, `gateway`, `httpapi`
 (dev only, trusts `X-Dev-Player`, loopback only), `pkg/agentsig` (public signing library).
 Details: `docs/ARCHITECTURE.md`, protocol: `docs/PROTOCOL.md`, security: `docs/SECURITY-MODEL.md`.
 
@@ -58,7 +58,7 @@ transport is stateless on purpose: identity is resolved per request, never carri
 3. A failed backend call must release its reservation and must not start a cooldown.
 4. Policy store errors fail closed.
 5. Audit stores a hash of arguments, never the arguments.
-6. Dependencies are kept minimal (today: `go-sdk`, `goccy/go-yaml`, `go-redis`). Adding one needs a reason in
+6. Dependencies are kept minimal (today: `go-sdk`, `goccy/go-yaml`, `go-redis`, `pgx`). Adding one needs a reason in
    the PR and an entry in `docs/DECISIONS.md`, and ask first.
 7. Compatibility changes (manifest format, signed request, policy semantics) get an entry in
    `docs/DECISIONS.md` first.
@@ -78,8 +78,12 @@ contract `internal/policy/policytest` (new stores must pass `policytest.Run`), a
 `internal/policy/redisstore` (Lua scripts; `--redis-addr` or `AGENTGW_REDIS_ADDR`). The `dev`
 service starts a `redis` service and sets `AGENTGW_TEST_REDIS_ADDR`; redis tests skip without it.
 
-Next: confirmations in Postgres (pgx v5 chosen, add a `postgres` compose service), then admin
-endpoints for switches. Open MCP polish: `structuredContent` for results, request cancellation.
+Confirmations are done too: tools with `confirm: true` wait for the player (`internal/confirm`,
+contract `confirmtest.Run`, Postgres store `internal/confirm/pgstore`, `--postgres-url` or
+`AGENTGW_POSTGRES_URL`; postgres tests need `AGENTGW_TEST_POSTGRES_URL`, set by the `dev` service).
+The flow is specified in `docs/DECISIONS.md`.
+
+Next: admin endpoints for switches (M4 territory, dev API first). Open MCP polish: `structuredContent` for results, request cancellation.
 
 ## Testing against a game
 

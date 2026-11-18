@@ -15,6 +15,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
+	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
 	"github.com/Moustafa-Elgammal/agentgw/internal/connector"
 	"github.com/Moustafa-Elgammal/agentgw/internal/core"
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
@@ -84,6 +85,7 @@ type rig struct {
 	audit *audit.Memory
 	m     *manifest.Manifest
 	pol   *policy.Memory
+	conf  *confirm.Memory
 }
 
 func newRig(t *testing.T, limits policy.Limits) *rig {
@@ -94,10 +96,11 @@ func newRig(t *testing.T, limits policy.Limits) *rig {
 	}
 	b, a := newBackend(t), &audit.Memory{}
 	pol := policy.NewMemory(limits, nil)
-	svc := gateway.New(m, pol, connector.NewHTTP(b.srv.URL, keyID, secret), a)
+	conf := confirm.NewMemory(nil)
+	svc := gateway.New(m, pol, connector.NewHTTP(b.srv.URL, keyID, secret), a, gateway.WithConfirmations(conf))
 	ts := httptest.NewServer(mcpserver.Handler(svc, mcpserver.DevAuth("conf")))
 	t.Cleanup(ts.Close)
-	return &rig{ts.URL, b, a, m, pol}
+	return &rig{ts.URL, b, a, m, pol, conf}
 }
 
 type playerRT struct{ player string }
@@ -349,5 +352,47 @@ func TestKillSwitchStopsCallsAndCanBeLifted(t *testing.T) {
 	}
 	if body, isErr := call(t, cs, "sell_resource", sell(1)); isErr {
 		t.Fatalf("switch lifted, call must pass: %v", body)
+	}
+}
+
+func TestConfirmedToolNeedsThePlayerNotTheAgent(t *testing.T) {
+	g := newRig(t, policy.DefaultLimits)
+	cs := g.client(t, "alice")
+	args := map[string]any{"kind": "farm", "x": 2, "y": 3}
+	alice := core.Principal{TenantID: "conf", PlayerID: "alice"}
+	ctx := context.Background()
+
+	body, isErr := call(t, cs, "build_structure", args)
+	if !isErr || body["code"] != "confirmation_required" {
+		t.Fatalf("want confirmation_required, got %v", body)
+	}
+	id := body["data"].(map[string]any)["confirmation_id"].(string)
+	if len(g.b.got()) != 0 {
+		t.Fatal("nothing may reach the backend before the player approves")
+	}
+
+	// The agent has no tool to approve, and another player cannot approve for alice.
+	if err := g.conf.Approve(ctx, core.Principal{TenantID: "conf", PlayerID: "mallory"}, id); err == nil {
+		t.Fatal("only the owning player can approve")
+	}
+	if body, _ := call(t, cs, "build_structure", args); body["code"] != "confirmation_required" {
+		t.Fatalf("still waiting, got %v", body)
+	}
+
+	if err := g.conf.Approve(ctx, alice, id); err != nil {
+		t.Fatal(err)
+	}
+	if body, isErr := call(t, cs, "build_structure", map[string]any{"kind": "farm", "x": 2, "y": 4}); !isErr || body["code"] != "confirmation_required" {
+		t.Fatalf("approval covers only the exact arguments, got %v", body)
+	}
+	if body, isErr := call(t, cs, "build_structure", args); isErr {
+		t.Fatalf("approved call must run: %v", body)
+	}
+	calls := g.b.got()
+	if len(calls) != 1 || calls[0].Path != "/api/v1/build" || calls[0].Player != "alice" {
+		t.Fatalf("backend calls = %+v", calls)
+	}
+	if body, _ := call(t, cs, "build_structure", args); body["code"] != "confirmation_required" {
+		t.Fatalf("an approval is single use, got %v", body)
 	}
 }

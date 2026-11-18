@@ -33,7 +33,8 @@ internal/policy/policytest  the contract every store must pass
 internal/connector Connector interface + level 0 REST connector
 internal/audit     Auditor interface, memory and slog implementations
 internal/gateway   the pipeline
-internal/httpapi   dev-only JSON front door
+internal/confirm   player confirmations: Store interface, memory store, pgstore (Postgres), confirmtest contract
+internal/httpapi   dev-only JSON front door (also the player's approve and deny endpoints)
 internal/mcpserver MCP front door (streamable HTTP, stateless, per-request principal)
 pkg/agentsig       request signing and verification (importable by Go backends)
 examples/city      example manifest and a fake backend

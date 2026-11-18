@@ -35,6 +35,7 @@ and a test keeps them identical.
 | `tools[].tier` | `read`, `safe`, `medium` or `sensitive` (sensitive is disabled in v1) |
 | `tools[].http` | `method` GET, POST, PUT, PATCH or DELETE. `url` is a path starting with `/`; `{name}` placeholders take values from params |
 | `tools[].params` | `type` is `string`, `integer`, `number` or `boolean`. Optional: `enum` (strings), `min`/`max` (numbers), `optional` |
+| `tools[].confirm` | Optional boolean. `true` makes every call wait for the player's approval (see DECISIONS.md, Confirmations). Not allowed on `read` tools |
 | `tools[].caps` | `per_day_calls`, `per_day_amount` + `amount_param`, `cooldown_seconds`. Read tools take no daily caps |
 
 Unknown fields are rejected so typos fail loudly. `gwctl validate` reports every problem

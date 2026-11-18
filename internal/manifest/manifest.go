@@ -127,6 +127,9 @@ func (m *Manifest) Validate() error {
 				add("%s: url placeholder {%s} has no matching param", where, ph[1])
 			}
 		}
+		if t.Confirm && t.Tier == core.TierRead {
+			add("%s: read tools cannot require confirmation", where)
+		}
 		if t.Tier == core.TierRead && (t.Caps.PerDayAmount > 0 || t.Caps.PerDayCalls > 0) {
 			add("%s: read tools take no daily caps", where)
 		}

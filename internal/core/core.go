@@ -62,6 +62,7 @@ type Tool struct {
 	Description string           `json:"description"`
 	Tier        Tier             `json:"tier"`
 	Caps        Caps             `json:"caps,omitempty"`
+	Confirm     bool             `json:"confirm,omitempty"` // every call needs the player's approval
 	HTTP        HTTPBinding      `json:"http"`
 	Params      map[string]Param `json:"params,omitempty"`
 }

@@ -16,8 +16,10 @@ services:
     environment:
       - *secret
       - AGENTGW_TEST_REDIS_ADDR=redis:6379
+      - AGENTGW_TEST_POSTGRES_URL=postgres://agentgw:agentgw-dev@postgres:5432/agentgw?sslmode=disable
     depends_on:
       redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
 
   # Shared policy store (rate limits, caps, cooldowns, kill switches). Not published to the host.
   redis:
@@ -31,6 +33,23 @@ services:
     expose:
       - "6379"
 
+  # Confirmations live here. Dev credentials only, not published to the host.
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: agentgw
+      POSTGRES_PASSWORD: agentgw-dev
+      POSTGRES_DB: agentgw
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentgw -d agentgw"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    expose:
+      - "5432"
+
   # docker compose up --build   -> dev API on http://127.0.0.1:8080 (loopback only)
   gateway:
     build: { context: ., target: gateway }
@@ -41,6 +60,7 @@ services:
       - --redis-addr=redis:6379
     environment:
       - *secret
+      - AGENTGW_POSTGRES_URL=postgres://agentgw:agentgw-dev@postgres:5432/agentgw?sslmode=disable
     volumes:
       - ./examples/city:/etc/agentgw:ro
     ports:
@@ -48,6 +68,7 @@ services:
     depends_on:
       city-backend: { condition: service_started }
       redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
 
   city-backend:
     build: { context: ., target: city-backend }
@@ -58,5 +79,6 @@ services:
       - "9090"
 
 volumes:
+  pg-data:
   go-mod:
   go-build:

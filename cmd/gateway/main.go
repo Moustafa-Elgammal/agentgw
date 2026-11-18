@@ -13,9 +13,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
+	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
+	"github.com/Moustafa-Elgammal/agentgw/internal/confirm/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/connector"
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
 	"github.com/Moustafa-Elgammal/agentgw/internal/httpapi"
@@ -32,6 +35,7 @@ func main() {
 		keyID        = flag.String("key-id", "dev-1", "signing key id sent to the backend")
 		addr         = flag.String("addr", "127.0.0.1:8080", "listen address (keep it on loopback)")
 		tenant       = flag.String("tenant", "dev", "tenant id for the dev server")
+		postgresURL  = flag.String("postgres-url", os.Getenv("AGENTGW_POSTGRES_URL"), "Postgres URL for player confirmations (default: in-memory, single process)")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	flag.Parse()
@@ -66,14 +70,35 @@ func main() {
 		log.Warn("policy store", "kind", "memory", "note", "limits are per process and reset on restart")
 	}
 
+	var confirmations confirm.Store = confirm.NewMemory(nil)
+	if *postgresURL != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		pool, err := pgxpool.New(ctx, *postgresURL)
+		if err == nil {
+			ps := pgstore.New(pool, nil)
+			if err = ps.Migrate(ctx); err == nil {
+				confirmations = ps
+				defer pool.Close()
+				log.Info("confirmation store", "kind", "postgres")
+			}
+		}
+		cancel()
+		if err != nil {
+			log.Error("postgres", "err", err)
+			os.Exit(1)
+		}
+	} else {
+		log.Warn("confirmation store", "kind", "memory", "note", "approvals are per process and lost on restart")
+	}
 	svc := gateway.New(m,
 		pol,
 		connector.NewHTTP(*backendURL, *keyID, []byte(secret)),
-		audit.Slog{L: log})
+		audit.Slog{L: log},
+		gateway.WithConfirmations(confirmations))
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", mcpserver.Handler(svc, mcpserver.DevAuth(*tenant)))
-	mux.Handle("/", httpapi.New(svc, *tenant))
+	mux.Handle("/", httpapi.New(svc, *tenant, confirmations))
 
 	srv := &http.Server{
 		Addr: *addr, Handler: mux,

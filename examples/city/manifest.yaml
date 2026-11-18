@@ -16,6 +16,7 @@ tools:
   - name: build_structure
     description: Build a structure on a free tile of the 5x5 grid.
     tier: medium
+    confirm: true
     caps: {per_day_calls: 20}
     http: {method: POST, url: /api/v1/build}
     params:

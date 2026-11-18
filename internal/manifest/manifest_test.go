@@ -40,6 +40,7 @@ func TestParseRejects(t *testing.T) {
 		"placeholder":         `{"version":1,"tools":[{"name":"ab","description":"d","tier":"read","http":{"method":"GET","url":"/x/{id}"}}]}`,
 		"cap without param":   `{"version":1,"tools":[{"name":"ab","description":"d","tier":"medium","caps":{"per_day_amount":5},"http":{"method":"POST","url":"/x"}}]}`,
 		"read with caps":      `{"version":1,"tools":[{"name":"ab","description":"d","tier":"read","caps":{"per_day_calls":5},"http":{"method":"GET","url":"/x"}}]}`,
+		"read with confirm":   `{"version":1,"tools":[{"name":"ab","description":"d","tier":"read","confirm":true,"http":{"method":"GET","url":"/x"}}]}`,
 		"duplicate":           `{"version":1,"tools":[{"name":"ab","description":"d","tier":"read","http":{"method":"GET","url":"/x"}},{"name":"ab","description":"d","tier":"read","http":{"method":"GET","url":"/y"}}]}`,
 		"trailing":            good + ` {}`,
 	}
@@ -47,5 +48,12 @@ func TestParseRejects(t *testing.T) {
 		if _, err := Parse(strings.NewReader(doc)); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
+	}
+}
+
+func TestConfirmFlagParses(t *testing.T) {
+	m, err := Parse(strings.NewReader(`{"version":1,"tools":[{"name":"ab","description":"d","tier":"medium","confirm":true,"http":{"method":"POST","url":"/x"}}]}`))
+	if err != nil || !m.Tools[0].Confirm {
+		t.Fatalf("confirm must parse on a non-read tool: %v %+v", err, m)
 	}
 }
