@@ -45,6 +45,16 @@ Planned packages (see ROADMAP): `auth` and `authserver`
 (OAuth 2.1), `store` (Postgres, Redis), `relay` (WebSocket relay for client-authoritative
 games), `admin` (studio and player APIs), `obs` (metrics and tracing).
 
+## Stdio bridge
+
+`cmd/gwbridge` (package `internal/bridge`) lets stdio-only desktop MCP clients use the gateway.
+It is an MCP server on stdio and an MCP client of the gateway's `/mcp`, with fixed extra headers
+(a bearer token, or `X-Dev-Player` for `--dev-auth`). It answers `tools/list` and `tools/call`
+straight from the upstream on every request, so a changed tool set shows up without a restart.
+Results, including `isError` denials, pass through unchanged. A transport failure becomes a tool
+error so the stdio session survives; a local cancel cancels the upstream call. It makes no
+policy decisions and never logs to stdout.
+
 ## Integration levels
 
 | Level | Studio effort | How |

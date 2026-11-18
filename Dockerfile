@@ -23,6 +23,12 @@ USER nonroot
 EXPOSE 8080
 ENTRYPOINT ["/gateway"]
 
+# ---- stdio to HTTP bridge for desktop MCP clients (run with docker run -i) ----
+FROM gcr.io/distroless/static-debian12:nonroot AS bridge
+COPY --from=build /out/gwbridge /gwbridge
+USER nonroot
+ENTRYPOINT ["/gwbridge"]
+
 # ---- example fake backend runtime ----
 FROM gcr.io/distroless/static-debian12:nonroot AS city-backend
 COPY --from=build /out/backend /backend

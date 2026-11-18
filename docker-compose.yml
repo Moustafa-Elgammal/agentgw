@@ -74,6 +74,13 @@ services:
       redis: { condition: service_healthy }
       postgres: { condition: service_healthy }
 
+  # Build only: docker compose build bridge. Desktop clients launch it with docker run -i
+  # (see README, "Use the gateway from Claude Desktop").
+  bridge:
+    build: { context: ., target: bridge }
+    image: agentgw-bridge:latest
+    profiles: [tools]
+
   city-backend:
     build: { context: ., target: city-backend }
     environment:
