@@ -30,6 +30,34 @@
 - [ ] Which Go SDK release to pin, and how to track MCP spec revisions after 2026-07-28?
 - [ ] Open core: what, if anything, stays out of the open-source repository?
 
+## Auth (M3)
+
+Decided with the user: the gateway is an OAuth 2.1 resource server and embeds a minimal
+authorization server. A player proves who they are at consent with link tickets, and also with
+OIDC against the studio's identity provider.
+
+- **Opaque tokens, stored hashed.** Tokens are 256 bit random strings, kept as SHA-256 in the
+  store. No JWT library, and revocation is immediate because validation is a lookup. Access tokens
+  live 15 minutes. Refresh tokens live 30 days, rotate on every use, and reuse of a rotated token
+  revokes the whole grant.
+- **PKCE S256 required.** No implicit or password flow. Redirect URIs match exactly, except that
+  loopback `http://127.0.0.1` and `http://[::1]` clients may vary the port (RFC 8252). Clients
+  register themselves (RFC 7591) as public clients.
+- **Audience binding.** `resource` (RFC 8707) is required at authorize and token. A token is bound to
+  one resource, the game's MCP URL, and the gateway rejects a token whose audience is not its own.
+- **Scopes.** `coach` allows read tools. `operator` allows read and action tools. The player picks
+  one at consent. tools/list shows only what the scope allows and the pipeline enforces it
+  (`scope_insufficient`), so a coach grant cannot call an action tool by guessing its name.
+- **Grants.** One active grant per (player, client, resource). Consenting again updates its scope.
+  Revoking it kills every token of the grant. Players list and revoke their grants.
+- **Link tickets.** The studio's backend mints a single-use ticket (5 minutes) for a logged-in
+  player through a request signed like any other studio call (`agentsig`), and sends the player to
+  the consent page with it. The ticket carries the player id.
+- **OIDC.** Added after the ticket flow, needs a dependency, decided when built.
+- **Dev auth.** `X-Dev-Player` and `X-Dev-Admin` stay behind an explicit `--dev-auth` flag. Without
+  it, requests need a valid bearer token.
+- **Tenants.** One tenant per gateway process in M3 (`--tenant`). Per-tenant tokens and keys come with M4.
+
 ## Confirmations (M2)
 
 A tool marked `confirm: true` needs the player's approval for each call. The agent cannot approve
