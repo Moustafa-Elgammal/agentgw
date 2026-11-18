@@ -87,8 +87,9 @@ built and tested, with the scripted PKCE conformance test in `test/conformance/a
 `cmd/gateway` shares one Postgres pool (`--postgres-url`) between the confirmation and auth stores,
 prunes expired OAuth rows hourly, and mounts `StudioHandler`.
 
-Still open: OIDC login at consent (library choice pending), studio-signed confirmation endpoints
-(without `--dev-auth` there is no player path to approve a confirmation yet), CORS for browser
+Studio-signed confirmation endpoints (`confirm.StudioHandler`) are the player's approve and deny path
+in OAuth mode. Still open: OIDC login at consent (library choice pending), a shared replay cache for
+all studio-signed endpoints (only ticket minting has one), CORS for browser
 based clients, a bound on `/register`. MCP result
 polish is done: results carry `structuredContent` and a permissive `outputSchema`, and a cancelled
 call stops the backend request (see `docs/DECISIONS.md`).

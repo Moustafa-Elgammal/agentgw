@@ -156,6 +156,11 @@ func main() {
 		// studio-signed endpoints.
 		mux.Handle("/v1/studio/grants", as.StudioHandler())
 		mux.Handle("/v1/studio/grants/", as.StudioHandler())
+		// Same for approving or denying a confirmation: without --dev-auth this is the only
+		// player path, and it is signed by the studio, never reachable with an agent's token.
+		studio := confirm.StudioHandler(confirm.StudioConfig{Store: confirmations, Tenant: *tenant, KeyID: *studioKeyID, Secret: []byte(secret)})
+		mux.Handle("/v1/studio/confirmations", studio)
+		mux.Handle("/v1/studio/confirmations/", studio)
 		log.Info("oauth", "issuer", issuer, "resource", rs.Resource)
 	}
 

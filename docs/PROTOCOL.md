@@ -76,3 +76,39 @@ belongs to another player gives the same `404 {"error":"not_found"}`, so ids can
 
 `DELETE /v1/studio/grants` revokes all of the player's grants (a "log out all agents"
 button) and returns `{"revoked":2}`. Repeating it returns `{"revoked":0}`.
+
+## Studio confirmation endpoints
+
+Tools marked `confirm: true` need the player's approval for each call. In OAuth mode the
+player approves in the game's own UI, and the studio backend calls these endpoints signed
+exactly like the grant endpoints (same five headers, studio key, player in `X-AG-Player`).
+Only a studio-signed request can approve or deny. The agent's bearer token never reaches
+these routes. The tenant is the gateway's configured tenant, so a player only ever sees and
+decides their own confirmations. A bad, missing, stale or tampered signature gives
+`401 {"error":"invalid_client"}`. A store failure gives
+`503 {"error":"temporarily_unavailable"}` and nothing is reported as approved. Every
+response carries `Cache-Control: no-store`. Request bodies are limited to 64 KiB.
+
+`GET /v1/studio/confirmations` lists the player's live pending confirmations, oldest
+first. The list is `[]` when there are none.
+
+```json
+{"confirmations":[{"id":"3f1a...","tool":"build","state":"pending","created_at":"2026-01-02T03:04:05Z","expires_at":"2026-01-02T03:14:05Z","args_sha256":"9b7e..."}]}
+```
+
+`args_sha256` is not meant for display. The gateway stores only a hash of the arguments,
+never the arguments. If the studio needs to match a pending confirmation to something it
+knows (for example "build a farm at 2,3"), it can compute the same digest: the SHA-256,
+hex encoded, of the JSON encoding of the validated arguments with keys sorted (`argsDigest`
+in `internal/gateway/gateway.go`). Show the player the studio's own description of the action.
+
+`POST /v1/studio/confirmations/{id}/approve` and `POST /v1/studio/confirmations/{id}/deny`
+return `204`. They are idempotent: approving an approved confirmation or denying a denied
+one is also `204`. A confirmation that does not exist, has expired or belongs to another
+player gives the same `404 {"error":"not_found"}`, so ids cannot be probed. A confirmation
+that cannot make that move (for example approving a denied one) gives
+`409 {"error":"wrong_state"}`.
+
+The signature has no nonce store, so a replayed approve inside the timestamp window repeats
+the same idempotent move. An approval stays bound to one exact tool call and expires with
+the confirmation after 10 minutes.
