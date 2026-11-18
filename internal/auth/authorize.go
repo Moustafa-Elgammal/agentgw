@@ -19,6 +19,9 @@ type authzRequest struct {
 	allowedScopes []Scope
 }
 
+// maxState bounds the opaque value we echo back in a redirect and in the consent page.
+const maxState = 512
+
 var challengeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{43,128}$`)
 
 // parseAuthz validates the parameters of an authorization request. The returned
@@ -41,6 +44,9 @@ func (s *Server) parseAuthz(r *http.Request, q url.Values) (*authzRequest, bool,
 		return nil, false, "invalid_request", "redirect_uri does not match a registered one"
 	}
 	req := &authzRequest{client: c, redirectURI: redirect, state: q.Get("state"), challenge: q.Get("code_challenge"), resource: q.Get("resource")}
+	if len(req.state) > maxState {
+		return req, true, "invalid_request", "state is too long"
+	}
 	if q.Get("response_type") != "code" {
 		return req, true, "unsupported_response_type", "only response_type=code is supported"
 	}
@@ -84,7 +90,8 @@ func (s *Server) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, req, verified, code, desc)
 		return
 	}
-	if r.PostForm.Get("decision") == "deny" {
+	// Only an explicit allow proceeds. Anything else, including a missing decision, is a denial.
+	if r.PostForm.Get("decision") != "allow" {
 		s.redirectBack(w, r, req, url.Values{"error": {"access_denied"}, "error_description": {"the player declined"}})
 		return
 	}
@@ -101,6 +108,7 @@ func (s *Server) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	// Guessing a ticket is the only attack on this form, so every submission counts.
 	if !s.attempts.allow(clientIP(r)) {
+		w.Header().Set("Retry-After", "60")
 		s.render(w, http.StatusTooManyRequests, req, "Too many attempts. Wait a minute and try again.")
 		return
 	}
@@ -135,7 +143,7 @@ func (s *Server) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
 // the error is shown to the user, never sent to a URL an attacker may have chosen.
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, req *authzRequest, verified bool, code, desc string) {
 	if !verified {
-		securityHeaders(w)
+		securityHeaders(w, "")
 		http.Error(w, "Cannot continue: "+desc, http.StatusBadRequest)
 		return
 	}
@@ -157,15 +165,29 @@ func (s *Server) redirectBack(w http.ResponseWriter, r *http.Request, req *authz
 		q[k] = v
 	}
 	u.RawQuery = q.Encode()
-	securityHeaders(w)
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	securityHeaders(w, "")
+	http.Redirect(w, r, u.String(), http.StatusSeeOther) //nolint:gosec // target matched a registered redirect URI; 303 so the browser never re-POSTs
 }
 
-func securityHeaders(w http.ResponseWriter) {
+// securityHeaders sets the headers every page of the authorization server carries.
+// formTarget is the redirect URI of the request. Browsers apply form-action to the
+// redirect that answers a form post, so the consent page must allow that one origin.
+func securityHeaders(w http.ResponseWriter, formTarget string) {
 	h := w.Header()
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Frame-Options", "DENY") // the consent page must never be framed (clickjacking)
-	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'")
+	formAction := "'self'"
+	if u, err := url.Parse(formTarget); err == nil && u.Host != "" {
+		host := u.Host
+		if isLoopback(u.Hostname()) { // loopback clients may use any port
+			host = u.Hostname() + ":*"
+			if strings.Contains(u.Hostname(), ":") {
+				host = "[" + u.Hostname() + "]:*"
+			}
+		}
+		formAction += " " + u.Scheme + "://" + host
+	}
+	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action "+formAction+"; frame-ancestors 'none'; base-uri 'none'")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "no-referrer")
 }
@@ -214,7 +236,7 @@ func (s *Server) render(w http.ResponseWriter, status int, req *authzRequest, er
 	if u, err := url.Parse(req.redirectURI); err == nil {
 		host = u.Host
 	}
-	securityHeaders(w)
+	securityHeaders(w, req.redirectURI)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_ = consentTmpl.Execute(w, map[string]any{

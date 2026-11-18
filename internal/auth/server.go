@@ -33,6 +33,9 @@ type ServerConfig struct {
 type Server struct {
 	cfg      ServerConfig
 	attempts *limiter
+
+	seenMu sync.Mutex
+	seen   map[string]time.Time // signed ticket requests already honoured, to refuse replays
 }
 
 // NewServer builds the authorization server.
@@ -41,7 +44,7 @@ func NewServer(cfg ServerConfig) *Server {
 		cfg.Now = time.Now
 	}
 	cfg.Issuer = strings.TrimRight(cfg.Issuer, "/")
-	return &Server{cfg: cfg, attempts: newLimiter(10, time.Minute, cfg.Now)}
+	return &Server{cfg: cfg, attempts: newLimiter(10, time.Minute, cfg.Now), seen: map[string]time.Time{}}
 }
 
 // Handler serves the authorization server endpoints.
@@ -154,6 +157,9 @@ func redirectMatches(registered, requested string) bool {
 	if err1 != nil || err2 != nil || a.Scheme != "http" || b.Scheme != "http" {
 		return false
 	}
+	if b.User != nil || b.Fragment != "" {
+		return false
+	}
 	return isLoopback(a.Hostname()) && a.Hostname() == b.Hostname() && a.Path == b.Path && a.RawQuery == b.RawQuery
 }
 
@@ -204,6 +210,10 @@ func (s *Server) mintTicket(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusUnauthorized, "invalid_client", "a valid studio signature is required")
 		return
 	}
+	if s.replayed(r.Header.Get(agentsig.HeaderKeyID) + "|" + r.Header.Get(agentsig.HeaderIdempotency)) {
+		oauthError(w, http.StatusUnauthorized, "invalid_client", "this signed request was already used")
+		return
+	}
 	code := newTicketCode()
 	exp := s.cfg.Now().Add(TicketTTL)
 	if err := s.cfg.Store.PutTicket(r.Context(), HashToken(normalizeTicket(code)), s.cfg.Tenant, player, exp); err != nil {
@@ -211,6 +221,24 @@ func (s *Server) mintTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"ticket": code, "expires_at": exp.UTC()})
+}
+
+// replayed records a signed request's key id and idempotency key and reports whether it was
+// seen before. Entries live as long as a timestamp is accepted (agentsig.DefaultMaxSkew).
+func (s *Server) replayed(id string) bool {
+	s.seenMu.Lock()
+	defer s.seenMu.Unlock()
+	now := s.cfg.Now()
+	for k, t := range s.seen {
+		if now.Sub(t) > agentsig.DefaultMaxSkew {
+			delete(s.seen, k)
+		}
+	}
+	if _, dup := s.seen[id]; dup {
+		return true
+	}
+	s.seen[id] = now
+	return false
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

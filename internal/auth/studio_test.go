@@ -13,12 +13,8 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
 )
 
-const (
-	studioKey = "studio-1"
-	studioTen = "game"
-)
-
-var studioSecret = []byte("studio-secret")
+// studioKey and studioSecret are shared with server_test.go (same package).
+const studioTen = "game"
 
 type studioEnv struct {
 	st *auth.Memory

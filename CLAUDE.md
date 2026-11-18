@@ -77,13 +77,17 @@ confirmations for tools with `confirm: true` (`internal/confirm`, Postgres store
 `AGENTGW_TEST_REDIS_ADDR` and `AGENTGW_TEST_POSTGRES_URL`; those tests skip without them, CI runs
 them with service containers.
 
-Next, M3 auth: protected resource metadata, token validation (audience bound per game),
-authorization server with link tickets and consent, grants and revocation. The dev `X-Dev-Player`
-header and `X-Dev-Admin` stay until real auth replaces them. Several M3 choices are open in
-`docs/DECISIONS.md` (embed an authorization server or use an external one, player identity at
-consent); decide those with the user before building. MCP result polish is done: results carry
-`structuredContent` and a permissive `outputSchema`, and a cancelled call stops the backend request
-(see `docs/DECISIONS.md`).
+M3 progress: the auth store (`internal/auth`, memory plus `internal/auth/pgstore` for Postgres),
+bearer validation with audience binding (`ResourceServer`), the embedded authorization server
+(`server.go`, `authorize.go`, `token.go`: DCR, PKCE S256, consent page, link tickets, rotating
+refresh), and the studio-signed grant list and revoke endpoints (`studio.go`, `StudioHandler`) are
+built and tested, with the scripted PKCE conformance test in `test/conformance/auth_test.go`.
+`cmd/gateway` uses OAuth unless `--dev-auth` is set; compose keeps `--dev-auth` for the demo.
+
+Still open: wiring `pgstore` and `StudioHandler` into `cmd/gateway`, OIDC login at consent
+(library choice pending), CORS for browser based clients, a bound on `/register`. MCP result
+polish is done: results carry `structuredContent` and a permissive `outputSchema`, and a cancelled
+call stops the backend request (see `docs/DECISIONS.md`).
 
 ## Testing against a game
 

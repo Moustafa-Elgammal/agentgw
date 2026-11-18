@@ -58,6 +58,10 @@ services:
       - --backend-url=http://city-backend:9090
       - --addr=0.0.0.0:8080
       - --redis-addr=redis:6379
+      # Demo mode: trust the X-Dev-Player header and serve the dev API. To try real OAuth,
+      # delete this line (the issuer defaults to http://127.0.0.1:8080; the studio signing
+      # key id is --studio-key-id, secret AGENTGW_SIGNING_SECRET). See README, "OAuth flow".
+      - --dev-auth
     environment:
       - *secret
       - AGENTGW_POSTGRES_URL=postgres://agentgw:agentgw-dev@postgres:5432/agentgw?sslmode=disable

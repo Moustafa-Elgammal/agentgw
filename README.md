@@ -9,7 +9,7 @@ and records every attempt in an audit log. It works with any backend language, b
 the contract is a manifest plus a signed HTTP request, not a library.
 
 **Status: M0 done, M1 in progress.** The core pipeline works and is tested, and tools are
-now served over MCP (streamable HTTP at `/mcp`). OAuth and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROADMAP.md).
+now served over MCP (streamable HTTP at `/mcp`). Players link their agent with OAuth (M3, see below). See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Two modes for players
 
@@ -30,11 +30,27 @@ now served over MCP (streamable HTTP at `/mcp`). OAuth and persistence arrive in
 | Player confirmations for tools marked `confirm` (approve or deny, single use, memory or Postgres) | `internal/confirm`, `internal/confirm/pgstore` |
 | Policy store in Redis (shared across replicas, fails closed) and kill switches | `internal/policy/redisstore`, `internal/policy` |
 | MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
+| OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: OAuth and player linking (M3), Redis/Postgres stores (M2),
-relay for client-authoritative games (M5). The dev HTTP API and the MCP endpoint take the player from a
+Not yet: a persistent auth store, OIDC login, relay for client-authoritative games (M5).
+With `--dev-auth` (the compose demo) the dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.
+
+## OAuth flow
+
+Without `--dev-auth`, `/mcp` needs a bearer token. An MCP client discovers everything itself:
+
+1. `GET /.well-known/oauth-protected-resource/mcp`, then `/.well-known/oauth-authorization-server`.
+2. `POST /register` (dynamic client registration), then `GET /authorize` with PKCE S256 and `resource=<public-url>/mcp`.
+3. The player is on the studio's site, logged in. The studio backend calls
+   `POST /v1/studio/link-tickets` signed with `agentsig` (player in `X-AG-Player`) and shows the
+   player a short code. The player types it on the consent page and picks **coach** or **operator**.
+4. The client exchanges the code at `POST /token`, then refreshes with rotation.
+
+Flags: `--public-url` (issuer, default `http://127.0.0.1:8080`), `--studio-key-id` (secret is
+`AGENTGW_SIGNING_SECRET`). The scripted end to end test is `test/conformance/auth_test.go`.
+Grants live in memory for now, so restarting the gateway makes players link again.
 
 ## Try it
 

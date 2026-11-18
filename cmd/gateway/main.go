@@ -1,5 +1,7 @@
-// Command gateway runs the development server: the dev HTTP API plus the MCP
-// endpoint at /mcp. Both trust X-Dev-Player, so keep the listener on loopback.
+// Command gateway runs the gateway: the MCP endpoint at /mcp, protected by OAuth
+// bearer tokens from the embedded authorization server. With --dev-auth it instead
+// trusts the X-Dev-Player header and also serves the dev HTTP API, so keep that
+// listener on loopback.
 package main
 
 import (
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
+	"github.com/Moustafa-Elgammal/agentgw/internal/auth"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/connector"
@@ -36,6 +40,9 @@ func main() {
 		addr         = flag.String("addr", "127.0.0.1:8080", "listen address (keep it on loopback)")
 		tenant       = flag.String("tenant", "dev", "tenant id for the dev server")
 		postgresURL  = flag.String("postgres-url", os.Getenv("AGENTGW_POSTGRES_URL"), "Postgres URL for player confirmations (default: in-memory, single process)")
+		publicURL    = flag.String("public-url", "http://127.0.0.1:8080", "public base URL of this gateway: the OAuth issuer, and the MCP resource is <public-url>/mcp")
+		devAuth      = flag.Bool("dev-auth", false, "DEV ONLY: trust the X-Dev-Player header and serve the dev HTTP API instead of requiring OAuth tokens")
+		studioKeyID  = flag.String("studio-key-id", "dev-1", "key id the studio backend uses to sign link ticket requests (secret: AGENTGW_SIGNING_SECRET)")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	flag.Parse()
@@ -98,8 +105,29 @@ func main() {
 		gateway.WithConfirmations(confirmations))
 
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", mcpserver.Handler(svc, mcpserver.DevAuth(*tenant)))
-	mux.Handle("/", httpapi.New(svc, httpapi.Config{Tenant: *tenant, Confirmations: confirmations, Switches: switches}))
+	if *devAuth {
+		log.Warn("DEV AUTH ENABLED: identity comes from the X-Dev-Player header and the dev API is mounted. Never expose this listener beyond loopback")
+		mux.Handle("/mcp", mcpserver.Handler(svc, mcpserver.DevAuth(*tenant)))
+		mux.Handle("/", httpapi.New(svc, httpapi.Config{Tenant: *tenant, Confirmations: confirmations, Switches: switches}))
+	} else {
+		issuer := strings.TrimRight(*publicURL, "/")
+		// Seam: swap in a persistent auth.Store (Postgres) here.
+		var authStore auth.Store = auth.NewMemory(nil)
+		log.Warn("auth store", "kind", "memory", "note", "clients and grants are lost on restart, players must link again")
+		rs := &auth.ResourceServer{
+			Store: authStore, Resource: issuer + "/mcp", Tenant: *tenant,
+			MetadataURL: issuer + "/.well-known/oauth-protected-resource/mcp",
+		}
+		as := auth.NewServer(auth.ServerConfig{
+			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant,
+			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret),
+		})
+		mux.Handle("/mcp", mcpserver.Handler(svc, rs.Authenticate))
+		mux.Handle("GET /.well-known/oauth-protected-resource", rs.MetadataHandler(issuer))
+		mux.Handle("GET /.well-known/oauth-protected-resource/mcp", rs.MetadataHandler(issuer))
+		mux.Handle("/", as.Handler())
+		log.Info("oauth", "issuer", issuer, "resource", rs.Resource)
+	}
 
 	srv := &http.Server{
 		Addr: *addr, Handler: mux,
