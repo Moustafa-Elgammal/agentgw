@@ -43,7 +43,7 @@ func TestPostIsSignedAndCarriesJSON(t *testing.T) {
 		if string(body) != `{"quantity":5,"resource":"food"}` {
 			t.Errorf("body = %s", body)
 		}
-		w.Write([]byte(`{"earned":10}`))
+		_, _ = w.Write([]byte(`{"earned":10}`))
 	})
 	defer srv.Close()
 
@@ -60,7 +60,7 @@ func TestGetUsesPathPlaceholderAndQuery(t *testing.T) {
 		if r.URL.Path != "/api/buildings/12" || r.URL.Query().Get("verbose") != "true" {
 			t.Errorf("url = %s", r.URL)
 		}
-		w.Write([]byte(`{"id":12}`))
+		_, _ = w.Write([]byte(`{"id":12}`))
 	})
 	defer srv.Close()
 
@@ -76,7 +76,7 @@ func TestBackendStatusMapping(t *testing.T) {
 	status := 0
 	srv := backend(t, func(w http.ResponseWriter, _ *http.Request, _ []byte, _ string) {
 		w.WriteHeader(status)
-		w.Write([]byte("nope"))
+		_, _ = w.Write([]byte("nope"))
 	})
 	defer srv.Close()
 	c := NewHTTP(srv.URL, "k1", secret)

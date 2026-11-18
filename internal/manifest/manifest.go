@@ -34,11 +34,11 @@ var (
 
 // LoadFile reads and validates a manifest file.
 func LoadFile(path string) (*Manifest, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // path comes from the operator's own CLI flag
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return Parse(f)
 }
 

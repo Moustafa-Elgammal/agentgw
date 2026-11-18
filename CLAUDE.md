@@ -47,8 +47,9 @@ Details: `docs/ARCHITECTURE.md`, protocol: `docs/PROTOCOL.md`, security: `docs/S
 
 `make fmt` only checks (fails if `gofmt -l` lists files); it does not rewrite. Fix with
 `gofmt -w` inside the container. Slash commands `/check` and `/m1-spike` live in `.claude/commands/`.
-`internal/mcpserver` does not exist yet, so the only way to exercise the gateway end to end is the
-dev HTTP API (`internal/httpapi`) against `examples/city/`.
+The gateway is exercised end to end through the MCP endpoint (`/mcp`, `internal/mcpserver`) or the
+dev HTTP API (`internal/httpapi`) against `examples/city/`. Both trust `X-Dev-Player`. The MCP
+transport is stateless on purpose: identity is resolved per request, never carried by a session.
 
 ## Rules for changes
 
@@ -67,11 +68,12 @@ dev HTTP API (`internal/httpapi`) against `examples/city/`.
 
 ## Current focus: M1 (see `docs/ROADMAP.md`)
 
-1. Spike: pin `github.com/modelcontextprotocol/go-sdk`, register tools from a runtime JSON
-   schema (not Go structs), and serve a different tool set per request.
-2. `internal/mcpserver` adapter that calls `gateway.Service.Call`.
-3. YAML manifest authoring format compiling to the same structure (decide the YAML library).
-4. Conformance suite v0 under `test/conformance` driven by the official MCP client.
+Done: SDK spike (go-sdk v1.8.0, findings in `docs/DECISIONS.md`) and the `internal/mcpserver`
+adapter calling `gateway.Service.Call`.
+
+1. YAML manifest authoring format compiling to the same structure (decide the YAML library).
+2. Conformance suite v0 under `test/conformance` driven by the official MCP client.
+3. Remaining adapter work: MCP result mapping review, `structuredContent`, request cancellation.
 
 ## Testing against a game
 

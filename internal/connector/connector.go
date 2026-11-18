@@ -91,7 +91,7 @@ func (c *HTTP) Call(ctx context.Context, p core.Principal, t core.Tool, args map
 	if err != nil {
 		return core.Result{}, fmt.Errorf("backend unreachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
 		return core.Result{}, fmt.Errorf("reading backend response: %w", err)

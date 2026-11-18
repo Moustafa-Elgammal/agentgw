@@ -50,7 +50,7 @@ func TestReadsAndActionsHaveSeparateBuckets(t *testing.T) {
 	m := NewMemory(Limits{ActionsPerMinute: 1, ReadsPerMinute: 2}, newClock().now)
 	read := core.Tool{Name: "state", Tier: core.TierRead}
 	act := core.Tool{Name: "build", Tier: core.TierMedium}
-	m.Admit(ctx, player, act)
+	_, _ = m.Admit(ctx, player, act)
 	if d, _ := m.Admit(ctx, player, read); !d.Allowed {
 		t.Fatal("reads must not share the action bucket")
 	}
@@ -77,12 +77,12 @@ func TestDailyAmountReserveSettle(t *testing.T) {
 		t.Fatalf("second reserve must hit the cap, got %+v", d)
 	}
 	// A failed call releases its claim, so the amount is available again.
-	m.Settle(ctx, r1, false)
+	_ = m.Settle(ctx, r1, false)
 	r2, d, _ := m.Reserve(ctx, player, tool, 60)
 	if !d.Allowed {
 		t.Fatal("released amount must be reusable")
 	}
-	m.Settle(ctx, r2, true)
+	_ = m.Settle(ctx, r2, true)
 	if _, d, _ := m.Reserve(ctx, player, tool, 60); d.Allowed {
 		t.Fatal("settled amount must stay claimed")
 	}
@@ -100,7 +100,7 @@ func TestDailyCallCap(t *testing.T) {
 		if !d.Allowed {
 			t.Fatal("within cap")
 		}
-		m.Settle(ctx, r, true)
+		_ = m.Settle(ctx, r, true)
 	}
 	if _, d, _ := m.Reserve(ctx, player, tool, 0); d.Code != "daily_call_cap" {
 		t.Fatalf("got %+v", d)
@@ -113,12 +113,12 @@ func TestCooldownStartsOnlyAfterSuccess(t *testing.T) {
 	tool := core.Tool{Name: "collect", Tier: core.TierSafe, Caps: core.Caps{CooldownSeconds: 30}}
 
 	r, _, _ := m.Reserve(ctx, player, tool, 0)
-	m.Settle(ctx, r, false)
+	_ = m.Settle(ctx, r, false)
 	if _, d, _ := m.Reserve(ctx, player, tool, 0); !d.Allowed {
 		t.Fatal("failed call must not start the cooldown")
 	}
 	r, _, _ = m.Reserve(ctx, player, tool, 0)
-	m.Settle(ctx, r, true)
+	_ = m.Settle(ctx, r, true)
 	if _, d, _ := m.Reserve(ctx, player, tool, 0); d.Code != "cooldown" {
 		t.Fatalf("expected cooldown, got %+v", d)
 	}

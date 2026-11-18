@@ -56,7 +56,7 @@ func setup(t *testing.T, limits policy.Limits) fixture {
 			w.WriteHeader(500)
 			return
 		}
-		w.Write([]byte(`{"done":true}`))
+		_, _ = w.Write([]byte(`{"done":true}`))
 	}))
 	t.Cleanup(srv.Close)
 	a := &audit.Memory{}

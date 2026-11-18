@@ -8,8 +8,9 @@ daily caps, cooldowns, kill switches), calls the studio's backend with a signed 
 and records every attempt in an audit log. It works with any backend language, because
 the contract is a manifest plus a signed HTTP request, not a library.
 
-**Status: M0 (foundations).** The core pipeline works and is tested. The MCP transport,
-OAuth and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: M0 done, M1 in progress.** The core pipeline works and is tested, and tools are
+now served over MCP (streamable HTTP at `/mcp`). The YAML manifest, conformance suite, OAuth
+and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Two modes for players
 
@@ -27,11 +28,12 @@ OAuth and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROA
 | Audit events with hashed arguments | `internal/audit` |
 | Call pipeline: lookup, admit, validate, reserve, call, settle, audit | `internal/gateway` |
 | Dev HTTP API around the pipeline | `internal/httpapi`, `cmd/gateway` |
+| MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: MCP transport (M1), OAuth and player linking (M3), Redis/Postgres stores (M2),
-relay for client-authoritative games (M5). The dev HTTP API takes the player from a header
-and must stay on loopback.
+Not yet: YAML manifest and conformance suite (M1), OAuth and player linking (M3), Redis/Postgres stores (M2),
+relay for client-authoritative games (M5). The dev HTTP API and the MCP endpoint take the player from a
+header and must stay on loopback.
 
 ## Try it
 

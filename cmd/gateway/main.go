@@ -1,4 +1,5 @@
-// Command gateway runs the M0 development server.
+// Command gateway runs the development server: the dev HTTP API plus the MCP
+// endpoint at /mcp. Both trust X-Dev-Player, so keep the listener on loopback.
 package main
 
 import (
@@ -17,6 +18,7 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
 	"github.com/Moustafa-Elgammal/agentgw/internal/httpapi"
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifest"
+	"github.com/Moustafa-Elgammal/agentgw/internal/mcpserver"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 )
 
@@ -47,8 +49,12 @@ func main() {
 		connector.NewHTTP(*backendURL, *keyID, []byte(secret)),
 		audit.Slog{L: log})
 
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", mcpserver.Handler(svc, mcpserver.DevAuth(*tenant)))
+	mux.Handle("/", httpapi.New(svc, *tenant))
+
 	srv := &http.Server{
-		Addr: *addr, Handler: httpapi.New(svc, *tenant),
+		Addr: *addr, Handler: mux,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second,
 	}
 	go func() {

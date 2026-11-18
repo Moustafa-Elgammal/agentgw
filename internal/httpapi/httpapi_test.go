@@ -17,7 +17,7 @@ import (
 func server(t *testing.T) *httptest.Server {
 	t.Helper()
 	be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"coins":100}`))
+		_, _ = w.Write([]byte(`{"coins":100}`))
 	}))
 	t.Cleanup(be.Close)
 	m, err := manifest.Parse(strings.NewReader(`{"version":1,"tools":[
@@ -41,7 +41,7 @@ func do(t *testing.T, method, url, player, body string) (int, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(b)
 }

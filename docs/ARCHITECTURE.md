@@ -32,11 +32,12 @@ internal/connector Connector interface + level 0 REST connector
 internal/audit     Auditor interface, memory and slog implementations
 internal/gateway   the pipeline
 internal/httpapi   dev-only JSON front door
+internal/mcpserver MCP front door (streamable HTTP, stateless, per-request principal)
 pkg/agentsig       request signing and verification (importable by Go backends)
 examples/city      example manifest and a fake backend
 ```
 
-Planned packages (see ROADMAP): `mcpserver` (MCP transport), `auth` and `authserver`
+Planned packages (see ROADMAP): `auth` and `authserver`
 (OAuth 2.1), `store` (Postgres, Redis), `relay` (WebSocket relay for client-authoritative
 games), `admin` (studio and player APIs), `obs` (metrics and tracing).
 

@@ -96,6 +96,7 @@ func main() {
 	if addr == "" {
 		addr = "127.0.0.1:9090"
 	}
-	log.Println("fake city backend on", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Println("fake city backend listening")
+	srv := &http.Server{Addr: addr, ReadHeaderTimeout: 5 * time.Second}
+	log.Fatal(srv.ListenAndServe())
 }
