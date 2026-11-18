@@ -1,7 +1,7 @@
 // Package manifest loads and validates a studio's tool manifest.
 //
-// M0 reads JSON. The YAML authoring format described in docs/MANIFEST.md is
-// added in M1 together with a YAML dependency.
+// Two formats compile to the same structure: JSON (the wire format) and YAML
+// (the authoring format). Both are strict: unknown fields are errors.
 package manifest
 
 import (
@@ -11,9 +11,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/goccy/go-yaml"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/core"
 )
@@ -32,14 +35,41 @@ var (
 	placeholder = regexp.MustCompile(`\{([a-z][a-z0-9_]*)\}`)
 )
 
-// LoadFile reads and validates a manifest file.
+// LoadFile reads and validates a manifest file. A .yaml or .yml extension selects
+// the YAML format, anything else is read as JSON.
 func LoadFile(path string) (*Manifest, error) {
 	f, err := os.Open(path) //nolint:gosec // path comes from the operator's own CLI flag
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
+	if ext := strings.ToLower(filepath.Ext(path)); ext == ".yaml" || ext == ".yml" {
+		return ParseYAML(f)
+	}
 	return Parse(f)
+}
+
+// maxManifest bounds what ParseYAML will read.
+const maxManifest = 4 << 20
+
+// ParseYAML decodes and validates a YAML manifest. Unknown fields and duplicate
+// keys are rejected so typos fail loudly, the same as for JSON.
+func ParseYAML(r io.Reader) (*Manifest, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxManifest+1))
+	if err != nil {
+		return nil, fmt.Errorf("manifest: read: %w", err)
+	}
+	if len(data) > maxManifest {
+		return nil, errors.New("manifest: file too large")
+	}
+	var m Manifest
+	if err := yaml.UnmarshalWithOptions(data, &m, yaml.Strict()); err != nil {
+		return nil, fmt.Errorf("manifest: decode yaml: %w", err)
+	}
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	return &m, nil
 }
 
 // Parse decodes and validates a manifest. Unknown fields are rejected so typos fail loudly.

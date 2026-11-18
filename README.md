@@ -9,8 +9,7 @@ and records every attempt in an audit log. It works with any backend language, b
 the contract is a manifest plus a signed HTTP request, not a library.
 
 **Status: M0 done, M1 in progress.** The core pipeline works and is tested, and tools are
-now served over MCP (streamable HTTP at `/mcp`). The YAML manifest, conformance suite, OAuth
-and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROADMAP.md).
+now served over MCP (streamable HTTP at `/mcp`). OAuth and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Two modes for players
 
@@ -21,7 +20,7 @@ and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROADMAP.m
 
 | Piece | Where |
 |---|---|
-| Manifest loader and validator (strict, reports all problems at once) | `internal/manifest` |
+| Manifest loader and validator, JSON or YAML (strict, reports all problems at once) | `internal/manifest` |
 | Policy: rate limit counted before validation, daily caps with reserve/settle, cooldowns, disabled sensitive tier | `internal/policy` |
 | Request signing (HMAC-SHA256, timestamp, idempotency key), usable by Go backends | `pkg/agentsig` |
 | REST connector (level 0) with path, query and JSON body mapping | `internal/connector` |
@@ -31,7 +30,7 @@ and persistence arrive in later milestones. See [docs/ROADMAP.md](docs/ROADMAP.m
 | MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: YAML manifest and conformance suite (M1), OAuth and player linking (M3), Redis/Postgres stores (M2),
+Not yet: OAuth and player linking (M3), Redis/Postgres stores (M2),
 relay for client-authoritative games (M5). The dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.
 

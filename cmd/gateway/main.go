@@ -24,7 +24,7 @@ import (
 
 func main() {
 	var (
-		manifestPath = flag.String("manifest", "", "path to the tool manifest (JSON)")
+		manifestPath = flag.String("manifest", "", "path to the tool manifest (.json, or .yaml/.yml)")
 		backendURL   = flag.String("backend-url", "", "base URL of the game backend")
 		keyID        = flag.String("key-id", "dev-1", "signing key id sent to the backend")
 		addr         = flag.String("addr", "127.0.0.1:8080", "listen address (keep it on loopback)")

@@ -8,9 +8,10 @@
 | Contribution terms | DCO sign-off | No CLA |
 | Language | Go | Single static binary, good concurrency |
 | M0 dependencies | Standard library only | Keeps the core auditable |
-| Manifest format in M0 | JSON | YAML authoring format comes with M1 |
+| Manifest format | JSON wire format, YAML authoring format (M1) | Both load through `manifest.LoadFile` by extension |
 | Cap unit in M0 | Units of an integer argument | Value-based caps are open |
 | Test environment | A separate fictional city simulation | Lives outside this repo |
+| YAML library | `github.com/goccy/go-yaml` v1.19.2 | Strict mode rejects unknown fields and duplicate keys, matching the JSON loader. `yaml.v3` is archived. `sigs.k8s.io/yaml` was rejected for weaker error positions. YAML is authoring only: it compiles to the same `Manifest` as JSON |
 | MCP SDK | `github.com/modelcontextprotocol/go-sdk` v1.8.0 | First dependency. Official SDK; raises the Go floor to 1.25. Pulled in by the M1 spike |
 
 ## Open

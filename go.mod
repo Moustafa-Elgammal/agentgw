@@ -2,7 +2,10 @@ module github.com/Moustafa-Elgammal/agentgw
 
 go 1.25.0
 
-require github.com/modelcontextprotocol/go-sdk v1.8.0
+require (
+	github.com/goccy/go-yaml v1.19.2
+	github.com/modelcontextprotocol/go-sdk v1.8.0
+)
 
 require (
 	github.com/google/jsonschema-go v0.4.3 // indirect

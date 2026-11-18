@@ -58,22 +58,24 @@ transport is stateless on purpose: identity is resolved per request, never carri
 3. A failed backend call must release its reservation and must not start a cooldown.
 4. Policy store errors fail closed.
 5. Audit stores a hash of arguments, never the arguments.
-6. Dependencies: M0 is standard library only. Adding one needs a reason in the PR and an
-   entry in `docs/DECISIONS.md`.
+6. Dependencies are kept minimal (today: `go-sdk`, `goccy/go-yaml`). Adding one needs a reason in
+   the PR and an entry in `docs/DECISIONS.md`, and ask first.
 7. Compatibility changes (manifest format, signed request, policy semantics) get an entry in
    `docs/DECISIONS.md` first.
 8. Sign off commits (`git commit -s`). No real game or employer material anywhere.
 9. Anything that needs a service or tool gets a Dockerfile target or compose service. Never ask
    the user to install it on the host.
 
-## Current focus: M1 (see `docs/ROADMAP.md`)
+## Current focus: M2 (see `docs/ROADMAP.md`)
 
-Done: SDK spike (go-sdk v1.8.0, findings in `docs/DECISIONS.md`), the `internal/mcpserver`
-adapter calling `gateway.Service.Call`, and conformance suite v0 (`test/conformance`, official MCP
-client, real manifest, signature-verifying backend; runs with `make test`).
+M0 and M1 are done: pipeline, signing, MCP endpoint (`internal/mcpserver`, stateless streamable
+HTTP), YAML or JSON manifests (`manifest.LoadFile` picks by extension), and conformance suite v0
+(`test/conformance`, official MCP client, signature-verifying backend, runs with `make test`).
+SDK spike findings are in `docs/DECISIONS.md`.
 
-1. YAML manifest authoring format compiling to the same structure (decide the YAML library).
-2. Remaining adapter work: MCP result mapping review, `structuredContent`, request cancellation.
+Next: Redis-backed `Policy` (compose service, never a host install), concurrency tests that
+prove reserves never exceed a cap, confirmations in Postgres, kill switches. Open MCP polish:
+`structuredContent` for results, request cancellation.
 
 ## Testing against a game
 

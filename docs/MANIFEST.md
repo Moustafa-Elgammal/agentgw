@@ -1,7 +1,9 @@
 # Manifest
 
-A manifest lists the tools a game exposes. M0 reads JSON; a YAML authoring format is
-planned for M1 and will compile to the same structure.
+A manifest lists the tools a game exposes. Two formats compile to the same structure: JSON
+(the wire format) and YAML (the authoring format, `.yaml` or `.yml`). Both reject unknown
+fields and duplicate keys. `examples/city/manifest.yaml` is the YAML twin of `manifest.json`,
+and a test keeps them identical.
 
 ```json
 {
