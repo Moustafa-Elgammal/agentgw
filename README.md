@@ -8,8 +8,9 @@ daily caps, cooldowns, kill switches), calls the studio's backend with a signed 
 and records every attempt in an audit log. It works with any backend language, because
 the contract is a manifest plus a signed HTTP request, not a library.
 
-**Status: M0 done, M1 in progress.** The core pipeline works and is tested, and tools are
-now served over MCP (streamable HTTP at `/mcp`). Players link their agent with OAuth (M3, see below). See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: M0 to M2 done, M3 nearly done.** The core pipeline, MCP transport, Redis and Postgres
+stores and player confirmations work and are tested. Players link their agent with OAuth (M3, see
+below). OIDC login at consent is the one open M3 item. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Two modes for players
 
@@ -33,7 +34,8 @@ now served over MCP (streamable HTTP at `/mcp`). Players link their agent with O
 | OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: a persistent auth store, OIDC login, relay for client-authoritative games (M5).
+Not yet: OIDC login at consent, relay for client-authoritative games (M5). Set `--postgres-url` to
+keep clients, grants and approvals across restarts.
 With `--dev-auth` (the compose demo) the dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.
 
@@ -48,8 +50,12 @@ Without `--dev-auth`, `/mcp` needs a bearer token. An MCP client discovers every
    player a short code. The player types it on the consent page and picks **coach** or **operator**.
 4. The client exchanges the code at `POST /token`, then refreshes with rotation.
 
+The game's own UI uses signed studio endpoints for the player's side: list and revoke linked
+agents (`/v1/studio/grants`) and approve or deny a pending confirmation
+(`/v1/studio/confirmations`). See `docs/PROTOCOL.md`.
+
 Flags: `--public-url` (issuer, default `http://127.0.0.1:8080`), `--studio-key-id` (secret is
-`AGENTGW_SIGNING_SECRET`). The scripted end to end test is `test/conformance/auth_test.go`.
+`AGENTGW_SIGNING_SECRET`), `--register-per-hour`, `--max-clients`, `--client-ip-header`. The scripted end to end test is `test/conformance/auth_test.go`.
 Grants live in memory for now, so restarting the gateway makes players link again.
 
 ## Try it
