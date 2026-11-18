@@ -15,6 +15,21 @@ services:
       - go-build:/root/.cache/go-build
     environment:
       - *secret
+      - AGENTGW_TEST_REDIS_ADDR=redis:6379
+    depends_on:
+      redis: { condition: service_healthy }
+
+  # Shared policy store (rate limits, caps, cooldowns, kill switches). Not published to the host.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    expose:
+      - "6379"
 
   # docker compose up --build   -> dev API on http://127.0.0.1:8080 (loopback only)
   gateway:
@@ -23,6 +38,7 @@ services:
       - --manifest=/etc/agentgw/manifest.json
       - --backend-url=http://city-backend:9090
       - --addr=0.0.0.0:8080
+      - --redis-addr=redis:6379
     environment:
       - *secret
     volumes:
@@ -30,7 +46,8 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
-      - city-backend
+      city-backend: { condition: service_started }
+      redis: { condition: service_healthy }
 
   city-backend:
     build: { context: ., target: city-backend }

@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
 	"github.com/Moustafa-Elgammal/agentgw/internal/connector"
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
@@ -20,6 +22,7 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifest"
 	"github.com/Moustafa-Elgammal/agentgw/internal/mcpserver"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
+	"github.com/Moustafa-Elgammal/agentgw/internal/policy/redisstore"
 )
 
 func main() {
@@ -29,6 +32,7 @@ func main() {
 		keyID        = flag.String("key-id", "dev-1", "signing key id sent to the backend")
 		addr         = flag.String("addr", "127.0.0.1:8080", "listen address (keep it on loopback)")
 		tenant       = flag.String("tenant", "dev", "tenant id for the dev server")
+		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	flag.Parse()
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
@@ -44,8 +48,26 @@ func main() {
 		os.Exit(1)
 	}
 
+	var pol policy.Policy = policy.NewMemory(policy.DefaultLimits, nil)
+	if *redisAddr != "" {
+		rdb := redis.NewClient(&redis.Options{Addr: *redisAddr})
+		defer func() { _ = rdb.Close() }()
+		rs := redisstore.New(rdb, "agentgw:", policy.DefaultLimits, nil)
+		pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := rs.Ping(pingCtx)
+		cancel()
+		if err != nil {
+			log.Error("redis", "addr", *redisAddr, "err", err)
+			os.Exit(1)
+		}
+		pol = rs
+		log.Info("policy store", "kind", "redis", "addr", *redisAddr)
+	} else {
+		log.Warn("policy store", "kind", "memory", "note", "limits are per process and reset on restart")
+	}
+
 	svc := gateway.New(m,
-		policy.NewMemory(policy.DefaultLimits, nil),
+		pol,
 		connector.NewHTTP(*backendURL, *keyID, []byte(secret)),
 		audit.Slog{L: log})
 

@@ -27,10 +27,11 @@ now served over MCP (streamable HTTP at `/mcp`). OAuth and persistence arrive in
 | Audit events with hashed arguments | `internal/audit` |
 | Call pipeline: lookup, admit, validate, reserve, call, settle, audit | `internal/gateway` |
 | Dev HTTP API around the pipeline | `internal/httpapi`, `cmd/gateway` |
+| Policy store in Redis (shared across replicas, fails closed) and kill switches | `internal/policy/redisstore`, `internal/policy` |
 | MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: OAuth and player linking (M3), Redis/Postgres stores (M2),
+Not yet: confirmations (M2), OAuth and player linking (M3), Redis/Postgres stores (M2),
 relay for client-authoritative games (M5). The dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.
 
@@ -40,7 +41,7 @@ Everything runs in containers. You only need Docker with Compose v2.
 
 ```bash
 docker compose run --rm dev make test        # tests with the race detector
-docker compose up --build                    # gateway + fake city backend
+docker compose up --build                    # gateway + Redis + fake city backend
 
 curl -s -X POST -H 'X-Dev-Player: p1' \
   -d '{"arguments":{"resource":"food","quantity":50}}' \
@@ -52,7 +53,7 @@ docker compose down
 Other commands: `docker compose run --rm dev make vet fmt lint vuln`, or the shortcuts
 `make docker-test`, `make docker-lint`. Expected failures come back as results with a
 machine-readable `code` and a hint, for example `invalid_arguments`, `rate_limited`,
-`daily_amount_cap`, `cooldown`. The agent can read them and correct itself.
+`daily_amount_cap`, `cooldown`, `switched_off`. The agent can read them and correct itself.
 
 ## Design rules
 

@@ -12,6 +12,10 @@
 | Cap unit in M0 | Units of an integer argument | Value-based caps are open |
 | Test environment | A separate fictional city simulation | Lives outside this repo |
 | YAML library | `github.com/goccy/go-yaml` v1.19.2 | Strict mode rejects unknown fields and duplicate keys, matching the JSON loader. `yaml.v3` is archived. `sigs.k8s.io/yaml` was rejected for weaker error positions. YAML is authoring only: it compiles to the same `Manifest` as JSON |
+| Redis client | `github.com/redis/go-redis/v9` v9.23.0 | Shared policy store. Every decision is one Lua script, so Admit, Reserve and Settle are atomic across replicas. Single node or primary/replica only: scripts touch the global switch set, so Redis Cluster is out of scope |
+| Postgres driver | `github.com/jackc/pgx/v5` | Chosen for confirmations (M2). Not added yet |
+| Policy store contract | `internal/policy/policytest` | Every store must pass the same suite. Memory and Redis both do |
+| Kill switches | `policy.Switch` with wildcard tenant, tool, player | Checked first in Admit and again in Reserve. Not charged to the rate limit. Block every tier they match |
 | MCP SDK | `github.com/modelcontextprotocol/go-sdk` v1.8.0 | First dependency. Official SDK; raises the Go floor to 1.25. Pulled in by the M1 spike |
 
 ## Open

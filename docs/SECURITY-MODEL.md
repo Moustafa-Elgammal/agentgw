@@ -30,10 +30,16 @@ another's data, and runaway agents.
 
 Rules 1 to 4, 7 and 8 are implemented and tested. Rules 5 and 6 need the MCP layer (M1).
 
+## Kill switches (M2)
+
+A `policy.Switch` turns off everything matching a tenant, tool and player (empty fields are
+wildcards). It is checked first in `Admit` and again in `Reserve`, answers `switched_off`, and
+is not charged to the rate limit. A switch blocks every tier it matches, reads included. If the
+switch store errors, `Admit` fails closed. Denials are audited like any other.
+
 ## Planned
 
-OAuth 2.1 resource server with audience binding per game, per-grant revocation and kill
-switches, SSRF-safe dialer for connector URLs, tenant isolation with row-level security,
+OAuth 2.1 resource server with audience binding per game and per-grant revocation, SSRF-safe dialer for connector URLs, tenant isolation with row-level security,
 envelope encryption for signing secrets, circuit breaker per backend.
 
 ## Reporting

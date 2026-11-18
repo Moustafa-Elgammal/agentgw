@@ -27,7 +27,9 @@ cmd/gateway        dev server (M0)
 cmd/gwctl          manifest CLI
 internal/core      shared types: Tool, Tier, Principal, Caps, Result
 internal/manifest  strict JSON manifest loader and validator
-internal/policy    Policy interface + in-memory implementation
+internal/policy    Policy and Switchboard interfaces, in-memory store
+internal/policy/redisstore  shared Redis store (Lua scripts, atomic across replicas)
+internal/policy/policytest  the contract every store must pass
 internal/connector Connector interface + level 0 REST connector
 internal/audit     Auditor interface, memory and slog implementations
 internal/gateway   the pipeline
@@ -63,4 +65,6 @@ type Connector interface {
 }
 ```
 
-A Redis-backed `Policy` replaces the in-memory one in M2 without touching the pipeline.
+The Redis-backed `Policy` replaces the in-memory one (`--redis-addr` or `AGENTGW_REDIS_ADDR`)
+without touching the pipeline. If Redis is unreachable every call is refused with
+`policy_unavailable` and audited as an error. Sensitive tools are refused without asking Redis.

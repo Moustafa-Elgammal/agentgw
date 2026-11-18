@@ -58,7 +58,7 @@ transport is stateless on purpose: identity is resolved per request, never carri
 3. A failed backend call must release its reservation and must not start a cooldown.
 4. Policy store errors fail closed.
 5. Audit stores a hash of arguments, never the arguments.
-6. Dependencies are kept minimal (today: `go-sdk`, `goccy/go-yaml`). Adding one needs a reason in
+6. Dependencies are kept minimal (today: `go-sdk`, `goccy/go-yaml`, `go-redis`). Adding one needs a reason in
    the PR and an entry in `docs/DECISIONS.md`, and ask first.
 7. Compatibility changes (manifest format, signed request, policy semantics) get an entry in
    `docs/DECISIONS.md` first.
@@ -73,9 +73,13 @@ HTTP), YAML or JSON manifests (`manifest.LoadFile` picks by extension), and conf
 (`test/conformance`, official MCP client, signature-verifying backend, runs with `make test`).
 SDK spike findings are in `docs/DECISIONS.md`.
 
-Next: Redis-backed `Policy` (compose service, never a host install), concurrency tests that
-prove reserves never exceed a cap, confirmations in Postgres, kill switches. Open MCP polish:
-`structuredContent` for results, request cancellation.
+M2 done so far: kill switches (`policy.Switch`, wildcard tenant/tool/player), the shared store
+contract `internal/policy/policytest` (new stores must pass `policytest.Run`), and the Redis store
+`internal/policy/redisstore` (Lua scripts; `--redis-addr` or `AGENTGW_REDIS_ADDR`). The `dev`
+service starts a `redis` service and sets `AGENTGW_TEST_REDIS_ADDR`; redis tests skip without it.
+
+Next: confirmations in Postgres (pgx v5 chosen, add a `postgres` compose service), then admin
+endpoints for switches. Open MCP polish: `structuredContent` for results, request cancellation.
 
 ## Testing against a game
 

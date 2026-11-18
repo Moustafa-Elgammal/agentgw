@@ -83,6 +83,7 @@ type rig struct {
 	b     *backend
 	audit *audit.Memory
 	m     *manifest.Manifest
+	pol   *policy.Memory
 }
 
 func newRig(t *testing.T, limits policy.Limits) *rig {
@@ -92,10 +93,11 @@ func newRig(t *testing.T, limits policy.Limits) *rig {
 		t.Fatal(err)
 	}
 	b, a := newBackend(t), &audit.Memory{}
-	svc := gateway.New(m, policy.NewMemory(limits, nil), connector.NewHTTP(b.srv.URL, keyID, secret), a)
+	pol := policy.NewMemory(limits, nil)
+	svc := gateway.New(m, pol, connector.NewHTTP(b.srv.URL, keyID, secret), a)
 	ts := httptest.NewServer(mcpserver.Handler(svc, mcpserver.DevAuth("conf")))
 	t.Cleanup(ts.Close)
-	return &rig{ts.URL, b, a, m}
+	return &rig{ts.URL, b, a, m, pol}
 }
 
 type playerRT struct{ player string }
@@ -315,5 +317,37 @@ func TestUnauthenticatedRequestIsRejected(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestKillSwitchStopsCallsAndCanBeLifted(t *testing.T) {
+	g := newRig(t, policy.DefaultLimits)
+	cs := g.client(t, "p1")
+	sw := policy.Switch{Tenant: "conf", Tool: "sell_resource"}
+	ctx := context.Background()
+
+	if err := g.pol.SetSwitch(ctx, sw, true); err != nil {
+		t.Fatal(err)
+	}
+	body, isErr := call(t, cs, "sell_resource", sell(1))
+	if !isErr || body["code"] != "switched_off" {
+		t.Fatalf("want switched_off, got %v", body)
+	}
+	if _, isErr := call(t, cs, "get_city_state", nil); isErr {
+		t.Fatal("a tool switch must not stop other tools")
+	}
+	if n := len(g.b.got()); n != 1 { // only the read reached the backend
+		t.Fatalf("backend calls = %d, want 1", n)
+	}
+	ev := g.audit.Events()
+	if ev[0].Outcome != "denied" || ev[0].Code != "switched_off" {
+		t.Errorf("denial must be audited, got %+v", ev[0])
+	}
+
+	if err := g.pol.SetSwitch(ctx, sw, false); err != nil {
+		t.Fatal(err)
+	}
+	if body, isErr := call(t, cs, "sell_resource", sell(1)); isErr {
+		t.Fatalf("switch lifted, call must pass: %v", body)
 	}
 }
