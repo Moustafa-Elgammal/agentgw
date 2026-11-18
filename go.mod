@@ -2,6 +2,8 @@ module github.com/Moustafa-Elgammal/agentgw
 
 go 1.26.0
 
+toolchain go1.26.11
+
 require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/jackc/pgx/v5 v5.13.0

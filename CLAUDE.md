@@ -29,7 +29,7 @@ Images (see `Dockerfile`): `dev` (golang + gcc for -race + govulncheck + golangc
 `dev`; module and build caches live in named volumes. Published ports bind to 127.0.0.1 only.
 The signing secret comes from `AGENTGW_SIGNING_SECRET` (default `dev-secret`, dev only).
 
-Go 1.25+ (see `go.mod`). Module path: `github.com/Moustafa-Elgammal/agentgw`.
+Go 1.26 (see `go.mod`; the `toolchain` line pins the patch release CI uses. Bump it when `make vuln` or CI reports a standard library fix). Module path: `github.com/Moustafa-Elgammal/agentgw`.
 
 Tests that need other services (Postgres, Redis in M2) get their own compose services; never
 require a host install.
