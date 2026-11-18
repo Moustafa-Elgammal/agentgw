@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "game": "city-demo",
+  "tools": [
+    {"name": "get_city_state", "description": "Overview of the city: coins, resources, population. Call this first.",
+     "tier": "read", "http": {"method": "GET", "url": "/api/v1/city"}},
+    {"name": "collect_taxes", "description": "Move pending taxes into the treasury. Cooldown applies.",
+     "tier": "safe", "caps": {"cooldown_seconds": 60},
+     "http": {"method": "POST", "url": "/api/v1/taxes/collect"}},
+    {"name": "build_structure", "description": "Build a structure on a free tile of the 5x5 grid.",
+     "tier": "medium", "caps": {"per_day_calls": 20},
+     "http": {"method": "POST", "url": "/api/v1/build"},
+     "params": {
+       "kind": {"type": "string", "enum": ["house", "farm", "well", "power_plant", "sawmill"]},
+       "x": {"type": "integer", "min": 0, "max": 4},
+       "y": {"type": "integer", "min": 0, "max": 4}}},
+    {"name": "sell_resource", "description": "Sell food, water or materials at the current sell price.",
+     "tier": "medium", "caps": {"per_day_amount": 300, "amount_param": "quantity"},
+     "http": {"method": "POST", "url": "/api/v1/market/sell"},
+     "params": {
+       "resource": {"type": "string", "enum": ["food", "water", "materials"]},
+       "quantity": {"type": "integer", "min": 1, "max": 1000}}}
+  ]
+}

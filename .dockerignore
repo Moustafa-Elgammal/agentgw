@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.vscode
+.claude
+bin
+*.test
+*.out
+.env
+.env.*

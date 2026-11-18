@@ -1,0 +1,45 @@
+name: agentgw
+
+x-dev-secret: &secret AGENTGW_SIGNING_SECRET=${AGENTGW_SIGNING_SECRET:-dev-secret}
+
+services:
+  # Toolchain container. Use it for every go, make, lint and vuln command:
+  #   docker compose run --rm dev make test
+  dev:
+    build: { context: ., target: dev }
+    profiles: [tools]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go-mod:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    environment:
+      - *secret
+
+  # docker compose up --build   -> dev API on http://127.0.0.1:8080 (loopback only)
+  gateway:
+    build: { context: ., target: gateway }
+    command:
+      - --manifest=/etc/agentgw/manifest.json
+      - --backend-url=http://city-backend:9090
+      - --addr=0.0.0.0:8080
+    environment:
+      - *secret
+    volumes:
+      - ./examples/city:/etc/agentgw:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - city-backend
+
+  city-backend:
+    build: { context: ., target: city-backend }
+    environment:
+      - *secret
+      - BACKEND_ADDR=0.0.0.0:9090
+    expose:
+      - "9090"
+
+volumes:
+  go-mod:
+  go-build:
