@@ -66,24 +66,23 @@ transport is stateless on purpose: identity is resolved per request, never carri
 9. Anything that needs a service or tool gets a Dockerfile target or compose service. Never ask
    the user to install it on the host.
 
-## Current focus: M2 (see `docs/ROADMAP.md`)
+## Current focus: M3 (see `docs/ROADMAP.md`)
 
-M0 and M1 are done: pipeline, signing, MCP endpoint (`internal/mcpserver`, stateless streamable
-HTTP), YAML or JSON manifests (`manifest.LoadFile` picks by extension), and conformance suite v0
-(`test/conformance`, official MCP client, signature-verifying backend, runs with `make test`).
-SDK spike findings are in `docs/DECISIONS.md`.
+M0 to M2 are done. Pipeline and signing; MCP endpoint (`internal/mcpserver`, stateless streamable
+HTTP); JSON or YAML manifests; conformance suite v0 (`test/conformance`); kill switches
+(`policy.Switch`); Redis policy store (`internal/policy/redisstore`, `--redis-addr`); player
+confirmations for tools with `confirm: true` (`internal/confirm`, Postgres store `pgstore`,
+`--postgres-url`; flow in `docs/DECISIONS.md`). New policy or confirmation stores must pass
+`policytest.Run` or `confirmtest.Run`. The `dev` service starts `redis` and `postgres` and sets
+`AGENTGW_TEST_REDIS_ADDR` and `AGENTGW_TEST_POSTGRES_URL`; those tests skip without them, CI runs
+them with service containers.
 
-M2 done so far: kill switches (`policy.Switch`, wildcard tenant/tool/player), the shared store
-contract `internal/policy/policytest` (new stores must pass `policytest.Run`), and the Redis store
-`internal/policy/redisstore` (Lua scripts; `--redis-addr` or `AGENTGW_REDIS_ADDR`). The `dev`
-service starts a `redis` service and sets `AGENTGW_TEST_REDIS_ADDR`; redis tests skip without it.
-
-Confirmations are done too: tools with `confirm: true` wait for the player (`internal/confirm`,
-contract `confirmtest.Run`, Postgres store `internal/confirm/pgstore`, `--postgres-url` or
-`AGENTGW_POSTGRES_URL`; postgres tests need `AGENTGW_TEST_POSTGRES_URL`, set by the `dev` service).
-The flow is specified in `docs/DECISIONS.md`.
-
-Next: admin endpoints for switches (M4 territory, dev API first). Open MCP polish: `structuredContent` for results, request cancellation.
+Next, M3 auth: protected resource metadata, token validation (audience bound per game),
+authorization server with link tickets and consent, grants and revocation. The dev `X-Dev-Player`
+header and `X-Dev-Admin` stay until real auth replaces them. Several M3 choices are open in
+`docs/DECISIONS.md` (embed an authorization server or use an external one, player identity at
+consent); decide those with the user before building. Open MCP polish: `structuredContent`
+for results, request cancellation.
 
 ## Testing against a game
 

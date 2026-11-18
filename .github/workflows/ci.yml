@@ -10,6 +10,25 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Real Redis and Postgres, so the store contract suites run instead of skipping.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 2s --health-retries 15
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: agentgw
+          POSTGRES_PASSWORD: agentgw-dev
+          POSTGRES_DB: agentgw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U agentgw -d agentgw" --health-interval 2s --health-timeout 2s --health-retries 20
+    env:
+      AGENTGW_TEST_REDIS_ADDR: 127.0.0.1:6379
+      AGENTGW_TEST_POSTGRES_URL: postgres://agentgw:agentgw-dev@127.0.0.1:5432/agentgw?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

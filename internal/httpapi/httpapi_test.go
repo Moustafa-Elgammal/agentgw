@@ -28,7 +28,7 @@ func server(t *testing.T) *httptest.Server {
 		t.Fatal(err)
 	}
 	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(be.URL, "k", []byte("s")), &audit.Memory{})
-	srv := httptest.NewServer(New(svc, "demo", nil))
+	srv := httptest.NewServer(New(svc, Config{Tenant: "demo"}))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -81,7 +81,7 @@ func TestConfirmationEndpoints(t *testing.T) {
 	}
 	store := confirm.NewMemory(nil)
 	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(be.URL, "k", []byte("s")), &audit.Memory{}, gateway.WithConfirmations(store))
-	srv := httptest.NewServer(New(svc, "demo", store))
+	srv := httptest.NewServer(New(svc, Config{Tenant: "demo", Confirmations: store}))
 	defer srv.Close()
 
 	// The agent asks and is told to wait for the player.
@@ -126,5 +126,57 @@ func TestConfirmationEndpointsOffWithoutStore(t *testing.T) {
 	s := server(t)
 	if code, _ := do(t, "GET", s.URL+"/v1/confirmations", "p1", ""); code != 501 {
 		t.Errorf("code = %d, want 501", code)
+	}
+}
+
+func TestAdminSwitches(t *testing.T) {
+	be := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"ok":1}`)) }))
+	defer be.Close()
+	m, err := manifest.Parse(strings.NewReader(`{"version":1,"tools":[
+	 {"name":"get_state","description":"State.","tier":"read","http":{"method":"GET","url":"/s"}},
+	 {"name":"build","description":"Build.","tier":"medium","http":{"method":"POST","url":"/b"}}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pol := policy.NewMemory(policy.DefaultLimits, nil)
+	svc := gateway.New(m, pol, connector.NewHTTP(be.URL, "k", []byte("s")), &audit.Memory{})
+	srv := httptest.NewServer(New(svc, Config{Tenant: "demo", Switches: pol}))
+	defer srv.Close()
+
+	admin := func(method, path, body string) (int, string) {
+		req, _ := http.NewRequest(method, srv.URL+path, strings.NewReader(body))
+		req.Header.Set("X-Dev-Admin", "true")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+
+	if code, _ := do(t, "GET", srv.URL+"/v1/admin/switches", "p1", ""); code != 403 {
+		t.Errorf("a player must not reach admin, got %d", code)
+	}
+	if code, body := admin("POST", "/v1/admin/switches", `{"tenant":"demo","tool":"build","on":true}`); code != 200 {
+		t.Fatalf("set = %d %s", code, body)
+	}
+	if code, body := do(t, "POST", srv.URL+"/v1/tools/build/call", "p1", `{}`); code != 422 || !strings.Contains(body, "switched_off") {
+		t.Errorf("switched tool = %d %s", code, body)
+	}
+	if code, body := do(t, "POST", srv.URL+"/v1/tools/get_state/call", "p1", `{}`); code != 200 {
+		t.Errorf("other tools keep working: %d %s", code, body)
+	}
+	if code, body := admin("GET", "/v1/admin/switches", ""); code != 200 || !strings.Contains(body, `"tool":"build"`) {
+		t.Errorf("list = %d %s", code, body)
+	}
+	if code, _ := admin("POST", "/v1/admin/switches", `{"tool":"build"}`); code != 400 {
+		t.Errorf("missing on must be a 400, got %d", code)
+	}
+	if code, _ := admin("POST", "/v1/admin/switches", `{"tenant":"demo","tool":"build","on":false}`); code != 200 {
+		t.Fatal("lift failed")
+	}
+	if code, body := do(t, "POST", srv.URL+"/v1/tools/build/call", "p1", `{}`); code != 200 {
+		t.Errorf("lifted switch = %d %s", code, body)
 	}
 }

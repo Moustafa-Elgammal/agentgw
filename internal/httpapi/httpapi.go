@@ -16,13 +16,21 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
 	"github.com/Moustafa-Elgammal/agentgw/internal/core"
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
+	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 )
 
 const maxRequest = 64 << 10
 
-// New returns the handler. tenant is fixed for the dev server. confirmations may be
-// nil, which turns the confirmation endpoints off (501).
-func New(svc *gateway.Service, tenant string, confirmations confirm.Store) http.Handler {
+// Config is what the dev API needs besides the gateway.
+type Config struct {
+	Tenant        string             // fixed for the dev server
+	Confirmations confirm.Store      // nil turns the confirmation endpoints off (501)
+	Switches      policy.Switchboard // nil turns the admin switch endpoints off (501)
+}
+
+// New returns the handler.
+func New(svc *gateway.Service, cfg Config) http.Handler {
+	tenant, confirmations := cfg.Tenant, cfg.Confirmations
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -133,6 +141,53 @@ func New(svc *gateway.Service, tenant string, confirmations confirm.Store) http.
 	mux.HandleFunc("POST /v1/confirmations/{id}/deny", decide(func(ctx context.Context, p core.Principal, id string) error {
 		return confirmations.Deny(ctx, p, id)
 	}, "denied"))
+
+	// Admin: kill switches. The studio's side. Dev only: it needs X-Dev-Admin: true,
+	// which proves nothing, so this listener must stay on loopback.
+	admin := func(w http.ResponseWriter, r *http.Request) bool {
+		if cfg.Switches == nil {
+			writeJSON(w, http.StatusNotImplemented, core.Denied("not_configured", "kill switches are not enabled"))
+			return false
+		}
+		if r.Header.Get("X-Dev-Admin") != "true" {
+			writeJSON(w, http.StatusForbidden, core.Denied("forbidden", "set X-Dev-Admin: true (dev only)"))
+			return false
+		}
+		return true
+	}
+	mux.HandleFunc("GET /v1/admin/switches", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		list, err := cfg.Switches.Switches(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, core.Denied("policy_unavailable", "try again later"))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"switches": list})
+	})
+	// POST {"tenant":"","tool":"build","player":"","on":true}. Empty fields are wildcards,
+	// so an empty body object switches everything off. "on" is required.
+	mux.HandleFunc("POST /v1/admin/switches", func(w http.ResponseWriter, r *http.Request) {
+		if !admin(w, r) {
+			return
+		}
+		var req struct {
+			policy.Switch
+			On *bool `json:"on"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequest))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil || req.On == nil {
+			writeJSON(w, http.StatusBadRequest, core.Denied("bad_request", `body must be {"tenant":"","tool":"","player":"","on":true|false}`))
+			return
+		}
+		if err := cfg.Switches.SetSwitch(r.Context(), req.Switch, *req.On); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, core.Denied("policy_unavailable", "try again later"))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "switch": req.Switch, "on": *req.On})
+	})
 	return mux
 }
 

@@ -70,6 +70,7 @@ func main() {
 		log.Warn("policy store", "kind", "memory", "note", "limits are per process and reset on restart")
 	}
 
+	switches, _ := pol.(policy.Switchboard) // Memory and Redis both implement it
 	var confirmations confirm.Store = confirm.NewMemory(nil)
 	if *postgresURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -98,7 +99,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", mcpserver.Handler(svc, mcpserver.DevAuth(*tenant)))
-	mux.Handle("/", httpapi.New(svc, *tenant, confirmations))
+	mux.Handle("/", httpapi.New(svc, httpapi.Config{Tenant: *tenant, Confirmations: confirmations, Switches: switches}))
 
 	srv := &http.Server{
 		Addr: *addr, Handler: mux,
