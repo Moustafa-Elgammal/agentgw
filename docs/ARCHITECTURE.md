@@ -34,6 +34,7 @@ internal/connector Connector interface + level 0 REST connector
 internal/audit     Auditor interface, memory and slog implementations
 internal/gateway   the pipeline
 internal/confirm   player confirmations: Store interface, memory store, pgstore (Postgres), confirmtest contract
+internal/auth/pgstore   auth.Store on Postgres (clients, tickets, codes, grants, token hashes); Migrate and Prune
 internal/httpapi   dev-only JSON front door (also the player's approve and deny endpoints)
 internal/mcpserver MCP front door (streamable HTTP, stateless, per-request principal)
 pkg/agentsig       request signing and verification (importable by Go backends)

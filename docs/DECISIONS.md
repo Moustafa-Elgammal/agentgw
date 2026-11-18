@@ -58,6 +58,19 @@ OIDC against the studio's identity provider.
   it, requests need a valid bearer token.
 - **Tenants.** One tenant per gateway process in M3 (`--tenant`). Per-tenant tokens and keys come with M4.
 
+### Auth store on Postgres (`internal/auth/pgstore`)
+
+- Tables `oauth_clients`, `oauth_tickets`, `oauth_codes`, `oauth_grants`, `oauth_access_tokens`,
+  `oauth_refresh_tokens`. Only hashes are stored. `Migrate` is idempotent.
+- Single use tickets and codes are one conditional `UPDATE ... RETURNING`. One active grant per
+  (tenant, player, client, resource) is a partial unique index on `revoked_at IS NULL`, and
+  `UpsertGrant` is `INSERT ... ON CONFLICT DO UPDATE`, so a revoked grant never returns.
+- Revocation sets `revoked_at`. Token lookups join the grant, so it is effective on the next call.
+- `RotateRefresh` locks the old token row (`FOR UPDATE`) in a transaction. One caller rotates,
+  every other caller sees `rotated` and gets `ErrReuse`, and the grant is revoked in that commit.
+- `Prune` deletes expired rows and grants revoked over 30 days ago. Rotated refresh tokens stay
+  until they expire so reuse is still detected. The caller schedules it; no goroutines.
+
 ## Confirmations (M2)
 
 A tool marked `confirm: true` needs the player's approval for each call. The agent cannot approve
