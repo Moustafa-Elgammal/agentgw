@@ -84,8 +84,12 @@ refresh), and the studio-signed grant list and revoke endpoints (`studio.go`, `S
 built and tested, with the scripted PKCE conformance test in `test/conformance/auth_test.go`.
 `cmd/gateway` uses OAuth unless `--dev-auth` is set; compose keeps `--dev-auth` for the demo.
 
-Still open: wiring `pgstore` and `StudioHandler` into `cmd/gateway`, OIDC login at consent
-(library choice pending), CORS for browser based clients, a bound on `/register`. MCP result
+`cmd/gateway` shares one Postgres pool (`--postgres-url`) between the confirmation and auth stores,
+prunes expired OAuth rows hourly, and mounts `StudioHandler`.
+
+Still open: OIDC login at consent (library choice pending), studio-signed confirmation endpoints
+(without `--dev-auth` there is no player path to approve a confirmation yet), CORS for browser
+based clients, a bound on `/register`. MCP result
 polish is done: results carry `structuredContent` and a permissive `outputSchema`, and a cancelled
 call stops the backend request (see `docs/DECISIONS.md`).
 

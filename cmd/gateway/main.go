@@ -21,6 +21,7 @@ import (
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
 	"github.com/Moustafa-Elgammal/agentgw/internal/auth"
+	authpg "github.com/Moustafa-Elgammal/agentgw/internal/auth/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/connector"
@@ -31,6 +32,27 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy/redisstore"
 )
+
+// pruneLoop removes expired OAuth rows once an hour until ctx ends.
+func pruneLoop(ctx context.Context, log *slog.Logger, s interface {
+	Prune(context.Context) (int64, error)
+}) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			n, err := s.Prune(ctx)
+			if err != nil {
+				log.Error("prune auth store", "err", err)
+				continue
+			}
+			log.Info("pruned auth store", "rows", n)
+		}
+	}
+}
 
 func main() {
 	var (
@@ -47,6 +69,8 @@ func main() {
 	)
 	flag.Parse()
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	ctx0, stopAll := context.WithCancel(context.Background()) // ends background loops on shutdown
+	defer stopAll()
 
 	secret := os.Getenv("AGENTGW_SIGNING_SECRET")
 	if *manifestPath == "" || *backendURL == "" || secret == "" {
@@ -79,15 +103,20 @@ func main() {
 
 	switches, _ := pol.(policy.Switchboard) // Memory and Redis both implement it
 	var confirmations confirm.Store = confirm.NewMemory(nil)
+	var authStore auth.Store = auth.NewMemory(nil)
 	if *postgresURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		pool, err := pgxpool.New(ctx, *postgresURL)
 		if err == nil {
-			ps := pgstore.New(pool, nil)
-			if err = ps.Migrate(ctx); err == nil {
-				confirmations = ps
+			cs, as := pgstore.New(pool, nil), authpg.New(pool, nil)
+			if err = cs.Migrate(ctx); err == nil {
+				err = as.Migrate(ctx)
+			}
+			if err == nil {
+				confirmations, authStore = cs, as
 				defer pool.Close()
-				log.Info("confirmation store", "kind", "postgres")
+				go pruneLoop(ctx0, log, as)
+				log.Info("stores", "confirmations", "postgres", "auth", "postgres")
 			}
 		}
 		cancel()
@@ -96,7 +125,7 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		log.Warn("confirmation store", "kind", "memory", "note", "approvals are per process and lost on restart")
+		log.Warn("confirmation and auth stores", "kind", "memory", "note", "approvals, clients and grants are per process and lost on restart")
 	}
 	svc := gateway.New(m,
 		pol,
@@ -111,9 +140,6 @@ func main() {
 		mux.Handle("/", httpapi.New(svc, httpapi.Config{Tenant: *tenant, Confirmations: confirmations, Switches: switches}))
 	} else {
 		issuer := strings.TrimRight(*publicURL, "/")
-		// Seam: swap in a persistent auth.Store (Postgres) here.
-		var authStore auth.Store = auth.NewMemory(nil)
-		log.Warn("auth store", "kind", "memory", "note", "clients and grants are lost on restart, players must link again")
 		rs := &auth.ResourceServer{
 			Store: authStore, Resource: issuer + "/mcp", Tenant: *tenant,
 			MetadataURL: issuer + "/.well-known/oauth-protected-resource/mcp",
@@ -126,6 +152,10 @@ func main() {
 		mux.Handle("GET /.well-known/oauth-protected-resource", rs.MetadataHandler(issuer))
 		mux.Handle("GET /.well-known/oauth-protected-resource/mcp", rs.MetadataHandler(issuer))
 		mux.Handle("/", as.Handler())
+		// The game's own UI lists and revokes a player's linked agents through these
+		// studio-signed endpoints.
+		mux.Handle("/v1/studio/grants", as.StudioHandler())
+		mux.Handle("/v1/studio/grants/", as.StudioHandler())
 		log.Info("oauth", "issuer", issuer, "resource", rs.Resource)
 	}
 
