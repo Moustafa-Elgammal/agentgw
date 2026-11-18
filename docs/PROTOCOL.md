@@ -52,3 +52,27 @@ v1
 
 Use `pkg/agentsig/agentsig_test.go` as the reference. A cross-language conformance suite
 is planned for M1.
+
+## Studio grant endpoints
+
+Players have no gateway login. The studio's backend knows the player and calls these
+endpoints, signed exactly like the gateway's own calls (same five headers, signed with the
+studio key). The player is the signed `X-AG-Player` header and the tenant is the gateway's
+configured tenant, so a player can only ever see and revoke their own grants. A missing,
+bad, stale or tampered signature gives `401 {"error":"invalid_client"}`. A store failure
+gives `503 {"error":"temporarily_unavailable"}` and nothing is reported as revoked. Every
+response carries `Cache-Control: no-store`.
+
+`GET /v1/studio/grants` lists the player's active grants, oldest first. `client_name` is
+empty if the client is gone.
+
+```json
+{"grants":[{"id":"9f2c...","client_id":"c1","client_name":"Claude on the laptop","scope":"operator","resource":"https://gw.example/mcp","created_at":"2026-01-02T03:04:05Z"}]}
+```
+
+`DELETE /v1/studio/grants/{id}` revokes one grant and every token of it, effective on the
+next token lookup. It returns `204`. A grant that does not exist, is already revoked or
+belongs to another player gives the same `404 {"error":"not_found"}`, so ids cannot be probed.
+
+`DELETE /v1/studio/grants` revokes all of the player's grants (a "log out all agents"
+button) and returns `{"revoked":2}`. Repeating it returns `{"revoked":0}`.
