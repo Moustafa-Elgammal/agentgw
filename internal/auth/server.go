@@ -3,7 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/json"
-	"io"
+	"errors"
 	"net"
 	"net/http"
 	"net/netip"
@@ -15,7 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
+	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 )
 
 // ServerConfig configures the embedded authorization server.
@@ -29,6 +29,10 @@ type ServerConfig struct {
 	// the same way the studio's backend verifies the gateway's calls.
 	StudioKeyID  string
 	StudioSecret []byte
+	// Verifier verifies studio-signed requests and refuses replays. Pass one shared
+	// with the confirmations handler so a request cannot be replayed across
+	// endpoints. Nil builds one from StudioKeyID and StudioSecret.
+	Verifier *studiosig.Verifier
 
 	// RegisterPerHour limits POST /register per client address. 0 means 10, negative disables.
 	RegisterPerHour int
@@ -60,9 +64,6 @@ type Server struct {
 	// replica counts alone. It bounds growth per process, it is not a global quota.
 	regMu      sync.Mutex
 	registered int
-
-	seenMu sync.Mutex
-	seen   map[string]time.Time // signed ticket requests already honoured, to refuse replays
 }
 
 // NewServer builds the authorization server.
@@ -77,7 +78,10 @@ func NewServer(cfg ServerConfig) *Server {
 	if cfg.MaxClients == 0 {
 		cfg.MaxClients = 10000
 	}
-	s := &Server{cfg: cfg, attempts: newLimiter(10, time.Minute, cfg.Now), seen: map[string]time.Time{}}
+	if cfg.Verifier == nil {
+		cfg.Verifier = studiosig.New(studiosig.Config{KeyID: cfg.StudioKeyID, Secret: cfg.StudioSecret, Now: cfg.Now})
+	}
+	s := &Server{cfg: cfg, attempts: newLimiter(10, time.Minute, cfg.Now)}
 	if cfg.RegisterPerHour > 0 {
 		s.regLimit = newLimiter(cfg.RegisterPerHour, time.Hour, cfg.Now)
 	}
@@ -299,23 +303,20 @@ func normalizeTicket(s string) string {
 // mintTicket lets the studio's backend create a link ticket for a logged-in player.
 // The request is signed like every studio call, with the player in X-AG-Player.
 func (s *Server) mintTicket(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
-	if err != nil {
+	player, _, err := s.cfg.Verifier.Verify(w, r)
+	switch {
+	case err == nil:
+	case errors.Is(err, studiosig.ErrTooLarge):
 		oauthError(w, http.StatusRequestEntityTooLarge, "invalid_request", "body too large")
 		return
-	}
-	player, err := agentsig.Verify(r, body, func(id string) []byte {
-		if id == s.cfg.StudioKeyID {
-			return s.cfg.StudioSecret
-		}
-		return nil
-	}, s.cfg.Now(), 0)
-	if err != nil || player == "" {
-		oauthError(w, http.StatusUnauthorized, "invalid_client", "a valid studio signature is required")
-		return
-	}
-	if s.replayed(r.Header.Get(agentsig.HeaderKeyID) + "|" + r.Header.Get(agentsig.HeaderIdempotency)) {
+	case errors.Is(err, studiosig.ErrReplay):
 		oauthError(w, http.StatusUnauthorized, "invalid_client", "this signed request was already used")
+		return
+	case errors.Is(err, studiosig.ErrBusy):
+		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "try again later")
+		return
+	default:
+		oauthError(w, http.StatusUnauthorized, "invalid_client", "a valid studio signature is required")
 		return
 	}
 	code := newTicketCode()
@@ -325,24 +326,6 @@ func (s *Server) mintTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"ticket": code, "expires_at": exp.UTC()})
-}
-
-// replayed records a signed request's key id and idempotency key and reports whether it was
-// seen before. Entries live as long as a timestamp is accepted (agentsig.DefaultMaxSkew).
-func (s *Server) replayed(id string) bool {
-	s.seenMu.Lock()
-	defer s.seenMu.Unlock()
-	now := s.cfg.Now()
-	for k, t := range s.seen {
-		if now.Sub(t) > agentsig.DefaultMaxSkew {
-			delete(s.seen, k)
-		}
-	}
-	if _, dup := s.seen[id]; dup {
-		return true
-	}
-	s.seen[id] = now
-	return false
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

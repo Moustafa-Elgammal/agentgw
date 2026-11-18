@@ -59,6 +59,12 @@ header-trusting dev API is not mounted.
 - Link tickets (`XXXX-XXXX`, 40 bits, 5 minutes, single use) are minted by the studio backend
   with a signed request (`agentsig`, replays refused). Guessing is limited to 10 attempts a minute
   per address, and every failure looks the same.
+- Studio-signed requests (link tickets, grants, confirmations) share one verifier
+  (`internal/studiosig`). It checks the signature, requires a player, and accepts each
+  (key id, idempotency key) pair once for twice the skew window, on every method and every
+  endpoint. A pair is recorded only after the signature verified, so an attacker without the
+  key cannot fill or poison the cache. The cache is capped; at the cap it fails closed (503)
+  and never evicts early. A captured approve, deny or revoke cannot be replayed.
 - Known limits: the authorization server state is in memory (lost on restart), the ticket
   limiter is per process, and dynamic client registration is unauthenticated (rate limited and
   capped, see below, but the cap is per process).

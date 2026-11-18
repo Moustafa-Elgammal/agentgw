@@ -53,6 +53,33 @@ v1
 Use `pkg/agentsig/agentsig_test.go` as the reference. A cross-language conformance suite
 is planned for M1.
 
+## Studio requests: replay rule
+
+Every studio-signed endpoint (link tickets, grants, confirmations) goes through one
+verifier. Beyond the signature and the 5 minute timestamp window, the gateway accepts each
+`(X-AG-Key-Id, X-AG-Idempotency-Key)` pair once. A second request with the same pair inside
+the window gets `401 {"error":"invalid_client"}` (link tickets: `401 invalid_client`, "this
+signed request was already used"), whatever its method, path or body. The pair is shared
+across all studio endpoints, so a request captured against one endpoint cannot be replayed
+against another.
+
+The rule applies to every method, including read only `GET` requests. A replayed read would
+return the captured data to whoever replays it.
+
+What studios must do: send a fresh, unique idempotency key (a random UUID) with every
+request, **including every retry**. A retry that reuses the key of an earlier attempt is
+refused even when the earlier attempt failed, because the gateway cannot tell a retry from a
+replay. Re-signing with a new key is always safe: approve, deny and revoke are idempotent, so
+a retry with a fresh key is harmless. If the gateway answers `503` because its replay cache
+is full, back off and retry with a fresh key.
+
+The gateway keeps each accepted pair for twice the skew window (10 minutes), because a
+timestamp up to 5 minutes in the future is accepted. The cache holds at most 100000 pairs
+and only grows from requests whose signature verified. At the cap the gateway fails closed
+with `503 {"error":"temporarily_unavailable"}` and never forgets a pair early. The cache is
+per process: with several gateway replicas, replay protection is per replica until the cache
+moves to a shared store.
+
 ## Studio grant endpoints
 
 Players have no gateway login. The studio's backend knows the player and calls these
@@ -109,6 +136,6 @@ player gives the same `404 {"error":"not_found"}`, so ids cannot be probed. A co
 that cannot make that move (for example approving a denied one) gives
 `409 {"error":"wrong_state"}`.
 
-The signature has no nonce store, so a replayed approve inside the timestamp window repeats
-the same idempotent move. An approval stays bound to one exact tool call and expires with
+A replayed approve or deny is refused by the studio replay rule above, so a captured request
+cannot move a confirmation again. An approval stays bound to one exact tool call and expires with
 the confirmation after 10 minutes.

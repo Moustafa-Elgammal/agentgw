@@ -193,3 +193,38 @@ Three weaknesses in the authorization server's public endpoints, fixed together.
   cross origin reads are what we defend against), on `/v1/studio/*` (signed studio calls), or on
   the MCP endpoint (bearer tokens for an agent, and a browser page must not be able to drive it
   unprompted). Those get no CORS headers, and tests prove it.
+
+## One verifier for studio-signed requests, with replay protection
+
+**Problem.** Ticket minting, the grants endpoints and the confirmations endpoints each read
+the body and called `agentsig.Verify`. Only ticket minting refused replays, with its own map.
+A captured signed `deny` replayed inside the 5 minute window could flip an approved
+confirmation, and a captured `DELETE /v1/studio/grants` repeated.
+
+**Decision.** `internal/studiosig.Verifier` is the only place studio signatures are checked.
+It reads at most 64 KiB, verifies the signature, requires a player, and accepts each
+(key id, idempotency key) pair once. `auth.ServerConfig.Verifier` and
+`confirm.StudioConfig.Verifier` take a shared instance, so a request captured against one
+endpoint cannot be replayed against another. When nil, each builds its own from the key id and
+secret, which only protects that handler. `cmd/gateway` should pass one instance to both.
+
+**GET is replay checked too.** A replayed read leaks nothing new to the studio, but the
+response goes to whoever replays it, so an exempt GET would let a captured request disclose a
+player's grants or pending confirmations again. One rule for every method is also simpler to
+document and to test. The cost is that a studio retrying a failed GET with the same key is
+refused. Studios must send a fresh idempotency key with every request including retries
+(PROTOCOL.md). That is cheap because the studio endpoints are idempotent, so retrying with a
+new key is safe.
+
+**Cache.** Pairs are recorded only after the signature verified, so unsigned traffic cannot
+fill, evict or poison the cache. Each entry lives for twice the skew window from insertion,
+because a timestamp up to one skew in the future is accepted (the old ticket map used one skew
+and could forget a future dated request while its timestamp was still valid). Entries sit in a
+FIFO queue and are dropped as they expire. The hard cap is 100000 entries. At the cap, after
+dropping expired entries, new requests fail closed with `503`. Evicting the oldest entry
+instead would let an attacker with a stream of valid signed requests push a captured one out
+and replay it, so it is not done. Concurrent identical requests are serialised by one mutex:
+exactly one wins.
+
+**Limits.** The cache is per process. Several replicas each accept a captured request once.
+A shared store is the fix and needs its own entry when the gateway is scaled out.

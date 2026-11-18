@@ -31,6 +31,7 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/mcpserver"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy/redisstore"
+	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 )
 
 // pruneLoop removes expired OAuth rows once an hour until ctx ends.
@@ -147,9 +148,12 @@ func main() {
 			Store: authStore, Resource: issuer + "/mcp", Tenant: *tenant,
 			MetadataURL: issuer + "/.well-known/oauth-protected-resource/mcp",
 		}
+		// One replay cache for every studio-signed endpoint, so a captured request cannot be
+		// replayed against a different endpoint either.
+		sv := studiosig.New(studiosig.Config{KeyID: *studioKeyID, Secret: []byte(secret)})
 		as := auth.NewServer(auth.ServerConfig{
 			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant,
-			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret),
+			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret), Verifier: sv,
 			RegisterPerHour: *registerHour, MaxClients: *maxClients, ClientIPHeader: *clientIPHdr,
 		})
 		mux.Handle("/mcp", mcpserver.Handler(svc, rs.Authenticate))
@@ -162,7 +166,7 @@ func main() {
 		mux.Handle("/v1/studio/grants/", as.StudioHandler())
 		// Same for approving or denying a confirmation: without --dev-auth this is the only
 		// player path, and it is signed by the studio, never reachable with an agent's token.
-		studio := confirm.StudioHandler(confirm.StudioConfig{Store: confirmations, Tenant: *tenant, KeyID: *studioKeyID, Secret: []byte(secret)})
+		studio := confirm.StudioHandler(confirm.StudioConfig{Store: confirmations, Tenant: *tenant, KeyID: *studioKeyID, Secret: []byte(secret), Verifier: sv})
 		mux.Handle("/v1/studio/confirmations", studio)
 		mux.Handle("/v1/studio/confirmations/", studio)
 		log.Info("oauth", "issuer", issuer, "resource", rs.Resource)

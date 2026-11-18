@@ -4,15 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/core"
-	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
+	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 )
-
-const studioMaxBody = 64 << 10
 
 // StudioConfig configures StudioHandler.
 type StudioConfig struct {
@@ -21,10 +18,15 @@ type StudioConfig struct {
 	KeyID  string
 	Secret []byte
 	Now    func() time.Time // nil means time.Now
+	// Verifier verifies studio-signed requests and refuses replays. Pass one shared
+	// with the authorization server so a request cannot be replayed across
+	// endpoints. Nil builds one from KeyID and Secret.
+	Verifier *studiosig.Verifier
 }
 
 type studio struct {
-	cfg StudioConfig
+	cfg      StudioConfig
+	verifier *studiosig.Verifier
 }
 
 // StudioHandler serves the studio-signed endpoints that let a game's own UI show a
@@ -37,7 +39,11 @@ func StudioHandler(cfg StudioConfig) http.Handler {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	s := &studio{cfg: cfg}
+	v := cfg.Verifier
+	if v == nil {
+		v = studiosig.New(studiosig.Config{KeyID: cfg.KeyID, Secret: cfg.Secret, Now: cfg.Now})
+	}
+	s := &studio{cfg: cfg, verifier: v}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/studio/confirmations", s.list)
 	mux.HandleFunc("POST /v1/studio/confirmations/{id}/approve", s.decide(Store.Approve))
@@ -48,22 +54,16 @@ func StudioHandler(cfg StudioConfig) http.Handler {
 // player verifies the studio signature and returns the signed player. On failure it
 // writes the response and returns false.
 func (s *studio) player(w http.ResponseWriter, r *http.Request) (core.Principal, bool) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, studioMaxBody))
-	if err != nil {
+	player, _, err := s.verifier.Verify(w, r)
+	switch {
+	case err == nil:
+		return core.Principal{TenantID: s.cfg.Tenant, PlayerID: player}, true
+	case errors.Is(err, studiosig.ErrBusy):
+		studioError(w, http.StatusServiceUnavailable, "temporarily_unavailable")
+	default:
 		studioError(w, http.StatusUnauthorized, "invalid_client")
-		return core.Principal{}, false
 	}
-	player, err := agentsig.Verify(r, body, func(id string) []byte {
-		if id == s.cfg.KeyID && len(s.cfg.Secret) > 0 {
-			return s.cfg.Secret
-		}
-		return nil
-	}, s.cfg.Now(), 0)
-	if err != nil || player == "" {
-		studioError(w, http.StatusUnauthorized, "invalid_client")
-		return core.Principal{}, false
-	}
-	return core.Principal{TenantID: s.cfg.Tenant, PlayerID: player}, true
+	return core.Principal{}, false
 }
 
 func studioError(w http.ResponseWriter, status int, code string) {

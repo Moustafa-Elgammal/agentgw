@@ -3,11 +3,10 @@ package auth
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"time"
 
-	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
+	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 )
 
 // StudioHandler serves the studio-signed endpoints that let a game's own UI show a
@@ -25,22 +24,16 @@ func (s *Server) StudioHandler() http.Handler {
 // studioPlayer verifies the studio signature and returns the signed player. On
 // failure it writes the response and returns false.
 func (s *Server) studioPlayer(w http.ResponseWriter, r *http.Request) (string, bool) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
-	if err != nil {
+	player, _, err := s.cfg.Verifier.Verify(w, r)
+	switch {
+	case err == nil:
+		return player, true
+	case errors.Is(err, studiosig.ErrBusy):
+		studioError(w, http.StatusServiceUnavailable, "temporarily_unavailable")
+	default:
 		studioError(w, http.StatusUnauthorized, "invalid_client")
-		return "", false
 	}
-	player, err := agentsig.Verify(r, body, func(id string) []byte {
-		if id == s.cfg.StudioKeyID && len(s.cfg.StudioSecret) > 0 {
-			return s.cfg.StudioSecret
-		}
-		return nil
-	}, s.cfg.Now(), 0)
-	if err != nil || player == "" {
-		studioError(w, http.StatusUnauthorized, "invalid_client")
-		return "", false
-	}
-	return player, true
+	return "", false
 }
 
 func studioError(w http.ResponseWriter, status int, code string) {

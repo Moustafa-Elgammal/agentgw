@@ -6,10 +6,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/auth"
+	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
 )
 
@@ -49,9 +52,12 @@ func (e *studioEnv) authed(tok string) bool {
 	return err == nil
 }
 
+var idemSeq atomic.Int64
+
+// signed builds a studio request with a fresh idempotency key, as the replay rule requires.
 func signed(method, path, player string) *http.Request {
 	r := httptest.NewRequest(method, path, nil)
-	agentsig.Sign(r, studioKey, studioSecret, player, "idem-1", nil, time.Now())
+	agentsig.Sign(r, studioKey, studioSecret, player, "idem-"+strconv.FormatInt(idemSeq.Add(1), 10), nil, time.Now())
 	return r
 }
 
@@ -263,5 +269,75 @@ func TestStudioStoreFailure(t *testing.T) {
 				t.Fatalf("code=%d body=%q", w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+// replay sends r's exact headers again, as an attacker who captured the request would.
+func replay(r *http.Request) *http.Request {
+	c := httptest.NewRequest(r.Method, r.URL.RequestURI(), nil)
+	c.Header = r.Header.Clone()
+	return c
+}
+
+func TestStudioReplayRefusedOnEveryEndpoint(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		first  int
+	}{
+		{"list", "GET", "/v1/studio/grants", 200},
+		{"revoke one", "DELETE", "/v1/studio/grants/nope", 404},
+		{"revoke all", "DELETE", "/v1/studio/grants", 200},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newStudioEnv(t, nil)
+			r := signed(tt.method, tt.path, "alice")
+			if w := e.do(replay(r)); w.Code != tt.first {
+				t.Fatalf("first: %d %s", w.Code, w.Body)
+			}
+			w := e.do(replay(r))
+			if w.Code != 401 || w.Body.String() != "{\"error\":\"invalid_client\"}\n" {
+				t.Fatalf("replay: %d %s", w.Code, w.Body)
+			}
+		})
+	}
+	t.Run("link ticket", func(t *testing.T) {
+		srv := auth.NewServer(auth.ServerConfig{Store: auth.NewMemory(nil), Issuer: "https://gw.example",
+			Resource: resource, Tenant: studioTen, StudioKeyID: studioKey, StudioSecret: studioSecret})
+		r := signed("POST", "/v1/studio/link-tickets", "alice")
+		do := func() int {
+			w := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(w, replay(r))
+			return w.Code
+		}
+		if c := do(); c != 201 {
+			t.Fatalf("first: %d", c)
+		}
+		if c := do(); c != 401 {
+			t.Fatalf("replay: %d", c)
+		}
+	})
+}
+
+func TestStudioReplayAcrossEndpointsWithSharedVerifier(t *testing.T) {
+	v := studiosig.New(studiosig.Config{KeyID: studioKey, Secret: studioSecret})
+	srv := auth.NewServer(auth.ServerConfig{Store: auth.NewMemory(nil), Issuer: "https://gw.example",
+		Resource: resource, Tenant: studioTen, StudioKeyID: studioKey, StudioSecret: studioSecret, Verifier: v})
+	serve := func(h http.Handler, r *http.Request) int {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	r := signed("GET", "/v1/studio/grants", "alice")
+	if c := serve(srv.StudioHandler(), replay(r)); c != 200 {
+		t.Fatalf("first: %d", c)
+	}
+	// The same idempotency key presented to the ticket endpoint, freshly signed, is refused.
+	other := httptest.NewRequest("POST", "/v1/studio/link-tickets", nil)
+	agentsig.Sign(other, studioKey, studioSecret, "alice", r.Header.Get(agentsig.HeaderIdempotency), nil, time.Now())
+	if c := serve(srv.Handler(), other); c != 401 {
+		t.Fatalf("cross endpoint reuse: %d", c)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifest"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
+	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
 )
 
@@ -41,11 +43,13 @@ func (c *clock) advance(d time.Duration) { c.t.Add(int64(d.Seconds())) }
 
 func pr(player string) core.Principal { return core.Principal{TenantID: tenant, PlayerID: player} }
 
-// do sends a request signed as the studio would.
+var idemSeq atomic.Int64
+
+// do sends a request signed as the studio would, with a fresh idempotency key.
 func do(t *testing.T, h http.Handler, now time.Time, method, path, player string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, nil)
-	agentsig.Sign(req, keyID, secret, player, "idem-"+path, nil, now)
+	agentsig.Sign(req, keyID, secret, player, "idem-"+strconv.FormatInt(idemSeq.Add(1), 10), nil, now)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -388,5 +392,94 @@ func TestEndToEndWithGateway(t *testing.T) {
 	r2 := svc.Call(ctx, pr("alice"), "build", args)
 	if !r2.OK || hits.Load() != 1 {
 		t.Fatalf("second call: %+v hits=%d", r2, hits.Load())
+	}
+}
+
+func TestReplayRefusedOnEveryEndpoint(t *testing.T) {
+	const base = "/v1/studio/confirmations"
+	tests := []struct {
+		name, method, verb string
+	}{
+		{"list", "GET", ""},
+		{"approve", "POST", "/approve"},
+		{"deny", "POST", "/deny"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clk := newClock()
+			store := confirm.NewMemory(clk.now)
+			id := mustGate(t, store, pr("alice"), "build")
+			h := newHandler(store, clk)
+			path := base
+			if tt.verb != "" {
+				path = base + "/" + id + tt.verb
+			}
+			req := httptest.NewRequest(tt.method, path, nil)
+			agentsig.Sign(req, keyID, secret, "alice", "captured", nil, clk.now())
+			send := func() int {
+				r := httptest.NewRequest(tt.method, path, nil)
+				r.Header = req.Header.Clone()
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, r)
+				return rec.Code
+			}
+			if c := send(); c != 200 && c != 204 {
+				t.Fatalf("first: %d", c)
+			}
+			if c := send(); c != 401 {
+				t.Fatalf("replay: %d", c)
+			}
+		})
+	}
+}
+
+// The studio's earlier signed deny and approve cannot be replayed to move a
+// confirmation again, and a captured request cannot cross to another handler that
+// shares the verifier.
+func TestReplayedDecisionsAreRefused(t *testing.T) {
+	clk := newClock()
+	store := confirm.NewMemory(clk.now)
+	v := studiosig.New(studiosig.Config{KeyID: keyID, Secret: secret, Now: clk.now})
+	cfg := confirm.StudioConfig{Store: store, Tenant: tenant, KeyID: keyID, Secret: secret, Now: clk.now, Verifier: v}
+	h := confirm.StudioHandler(cfg)
+	other := confirm.StudioHandler(cfg) // a second mount sharing the verifier
+
+	send := func(h http.Handler, hdr http.Header, id, verb string) int {
+		r := httptest.NewRequest("POST", "/v1/studio/confirmations/"+id+"/"+verb, nil)
+		r.Header = hdr.Clone()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec.Code
+	}
+	signedFor := func(id, verb, idem string) http.Header {
+		r := httptest.NewRequest("POST", "/v1/studio/confirmations/"+id+"/"+verb, nil)
+		agentsig.Sign(r, keyID, secret, "alice", idem, nil, clk.now())
+		return r.Header
+	}
+
+	id := mustGate(t, store, pr("alice"), "build")
+	approve := signedFor(id, "approve", "approve-1")
+	if c := send(h, approve, id, "approve"); c != 204 {
+		t.Fatalf("approve: %d", c)
+	}
+	if c := send(other, approve, id, "approve"); c != 401 {
+		t.Fatalf("approve replayed on a shared verifier: %d", c)
+	}
+	// A deny that reuses the approve's key is refused, so the approval stands.
+	if c := send(h, signedFor(id, "deny", "approve-1"), id, "deny"); c != 401 {
+		t.Fatalf("deny with a used key: %d", c)
+	}
+	g, _ := store.Gate(context.Background(), pr("alice"), "build", "sha-build")
+	if g.Status != confirm.StatusClaimed || g.ID != id {
+		t.Fatalf("approval did not survive: %+v", g)
+	}
+
+	id2 := mustGate(t, store, pr("alice"), "raze")
+	deny := signedFor(id2, "deny", "deny-1")
+	if c := send(h, deny, id2, "deny"); c != 204 {
+		t.Fatalf("deny: %d", c)
+	}
+	if c := send(h, deny, id2, "deny"); c != 401 {
+		t.Fatalf("deny replayed: %d", c)
 	}
 }
