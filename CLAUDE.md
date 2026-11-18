@@ -68,12 +68,12 @@ transport is stateless on purpose: identity is resolved per request, never carri
 
 ## Current focus: M1 (see `docs/ROADMAP.md`)
 
-Done: SDK spike (go-sdk v1.8.0, findings in `docs/DECISIONS.md`) and the `internal/mcpserver`
-adapter calling `gateway.Service.Call`.
+Done: SDK spike (go-sdk v1.8.0, findings in `docs/DECISIONS.md`), the `internal/mcpserver`
+adapter calling `gateway.Service.Call`, and conformance suite v0 (`test/conformance`, official MCP
+client, real manifest, signature-verifying backend; runs with `make test`).
 
 1. YAML manifest authoring format compiling to the same structure (decide the YAML library).
-2. Conformance suite v0 under `test/conformance` driven by the official MCP client.
-3. Remaining adapter work: MCP result mapping review, `structuredContent`, request cancellation.
+2. Remaining adapter work: MCP result mapping review, `structuredContent`, request cancellation.
 
 ## Testing against a game
 
