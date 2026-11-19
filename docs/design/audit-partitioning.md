@@ -1,6 +1,6 @@
 # Design note: audit table partitioning and retention
 
-Status: proposed. Nothing here is built. The default (one table, hourly `DELETE`) stays until this lands.
+Status: proposed and deferred. No baseline soak has been run, so there is no measured need yet. Nothing here is built. The default (one table, hourly `DELETE`) stays until this lands.
 Scope: how the `audit_events` table is kept small on a long-running pilot.
 
 ## The problem
