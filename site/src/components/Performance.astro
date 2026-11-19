@@ -1,0 +1,118 @@
+---
+// Charts for the soak run in site/src/data/soak.json (written by scripts/bench-report.py).
+// Inline SVG, drawn at build time, so there is no chart library and the page works without
+// JavaScript. Each point has a native tooltip, and every chart has a table behind it.
+const files = import.meta.glob('../data/soak.json', { eager: true }) as Record<string, { default: any }>;
+const d = Object.values(files)[0]?.default;
+
+const nice = (max: number) => {
+  const p = 10 ** Math.floor(Math.log10(max || 1));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= max) return m * p;
+  return 10 * p;
+};
+const fmt = (n: number) => (n >= 1000 ? n.toLocaleString('en-US') : String(Math.round(n * 10) / 10));
+
+type Chart = { sub: string; title: string; unit: string; xs: number[]; ys: number[]; max: number; ticks: number[]; path: string; area: string; pts: { x: number; y: number; label: string }[]; first: number; last: number };
+const W = 520, H = 190, L = 44, R = 16, T = 12, B = 30;
+const scaleY = (y: number, max: number) => T + (1 - y / max) * (H - T - B);
+
+function line(title: string, sub: string, unit: string, xs: number[], ys: number[]): Chart {
+  const max = nice(Math.max(...ys) * 1.15);
+  const xmax = Math.max(...xs) || 1;
+  const sx = (x: number) => L + (x / xmax) * (W - L - R);
+  const pts = xs.map((x, i) => ({ x: sx(x), y: scaleY(ys[i], max), label: `${fmt(ys[i])} ${unit} at minute ${Math.round(x)}` }));
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join('');
+  const base = scaleY(0, max);
+  const area = `${path}L${pts[pts.length - 1].x.toFixed(1)} ${base}L${pts[0].x.toFixed(1)} ${base}Z`;
+  return { sub, title, unit, xs, ys, max, ticks: [0, max / 2, max], path, area, pts, first: ys[0], last: ys[ys.length - 1] };
+}
+
+const charts: Chart[] = d
+  ? [
+      line('Gateway memory', 'resident memory of the gateway container', 'MiB', d.series.t_min, d.series.gateway_mib),
+      line('Gateway CPU', 'share of one core while serving the load', '%', d.series.t_min, d.series.gateway_cpu_pct),
+      line('Policy keys in Redis', 'bounded: two per simulated player', 'keys', d.series.t_min, d.series.redis_keys),
+    ]
+  : [];
+const pg = d ? { first: d.series.pg_conns[0], last: d.series.pg_conns[d.series.pg_conns.length - 1] } : { first: 0, last: 0 };
+
+const lat = d ? (['p50', 'p95', 'p99'] as const).map((k) => ({ k, v: d.latency_ms[k] as number })) : [];
+const latMax = d ? nice(Math.max(...lat.map((l) => l.v)) * 1.1) : 1;
+---
+{d ? (
+  <div class="gw-perf">
+    <div class="gw-tiles">
+      <div class="gw-tile"><span class="v">{fmt(d.calls_per_sec)}<small>/s</small></span><span class="k">calls per second, held for {d.duration_min} minutes</span></div>
+      <div class="gw-tile"><span class="v">{d.latency_ms.p99}<small> ms</small></span><span class="k">p99 latency for a full call</span></div>
+      <div class="gw-tile"><span class="v">{d.errors}<small> of {fmt(d.calls)}</small></span><span class="k">calls failed</span></div>
+      <div class="gw-tile"><span class="v">{fmt(charts[0].first)} to {fmt(charts[0].last)}<small> MiB</small></span><span class="k">gateway memory, start to end</span></div>
+    </div>
+
+    <div class="gw-chartgrid">
+      <figure class="gw-chart">
+        <figcaption>How long a call takes <span>milliseconds, through the whole pipeline to the backend and back (slowest single call: {d.latency_ms.max} ms)</span></figcaption>
+        <svg viewBox="0 0 520 150" role="img" aria-label={`Latency: ${lat.map((l) => `${l.k} ${l.v} milliseconds`).join(', ')}`}>
+          {lat.map((l, i) => {
+            const w = Math.max(2, (l.v / latMax) * 380);
+            return (
+              <g>
+                <text class="axis" x="40" y={38 + i * 38} text-anchor="end">{l.k}</text>
+                <rect class="bar" x="48" y={20 + i * 38} width={w} height="26"><title>{`${l.k}: ${l.v} ms`}</title></rect>
+                <text class="val" x={48 + w + 8} y={38 + i * 38}>{l.v} ms</text>
+              </g>
+            );
+          })}
+        </svg>
+      </figure>
+
+      {charts.map((c) => (
+        <figure class="gw-chart">
+          <figcaption>{c.title} <span>{c.sub}, over {d.duration_min} minutes</span></figcaption>
+          <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${c.title}: ${fmt(c.first)} ${c.unit} at the start, ${fmt(c.last)} at the end, peak ${fmt(Math.max(...c.ys))}`}>
+            {c.ticks.map((t) => (
+              <g>
+                <line class="grid" x1={L} x2={W - R} y1={scaleY(t, c.max)} y2={scaleY(t, c.max)} />
+                <text class="axis" x={L - 6} y={scaleY(t, c.max) + 4} text-anchor="end">{fmt(t)}</text>
+              </g>
+            ))}
+            <path class="area" d={c.area} />
+            <path class="ln" d={c.path} />
+            {c.pts.map((p, i) => (i % Math.ceil(c.pts.length / 40) === 0 || i === c.pts.length - 1) && (
+              <circle class="hit" cx={p.x} cy={p.y} r="7"><title>{p.label}</title></circle>
+            ))}
+            <circle class="end" cx={c.pts[c.pts.length - 1].x} cy={c.pts[c.pts.length - 1].y} r="3.5" />
+            <text class="val" x={c.pts[c.pts.length - 1].x - 6} y={c.pts[c.pts.length - 1].y - 10} text-anchor="end">{fmt(c.last)}</text>
+            <text class="axis" x={L} y={H - 8}>0</text>
+            <text class="axis" x={W - R} y={H - 8} text-anchor="end">{Math.round(Math.max(...c.xs))} min</text>
+          </svg>
+        </figure>
+      ))}
+    </div>
+
+    <details class="gw-perf-table">
+      <summary>Show the numbers as a table</summary>
+      <table>
+        <thead><tr><th>Measure</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Calls in total</td><td>{fmt(d.calls)} ({fmt(d.ok)} succeeded, {fmt(d.denied)} denied by policy or the backend, {d.errors} failed)</td></tr>
+          <tr><td>Latency p50, p95, p99 and the slowest call</td><td>{d.latency_ms.p50}, {d.latency_ms.p95}, {d.latency_ms.p99} and {d.latency_ms.max} ms</td></tr>
+          <tr><td>Gateway memory, first and last sample</td><td>{fmt(charts[0].first)} and {fmt(charts[0].last)} MiB (peak {fmt(Math.max(...charts[0].ys))})</td></tr>
+          <tr><td>Gateway CPU</td><td>{fmt(Math.min(...charts[1].ys))} to {fmt(Math.max(...charts[1].ys))} percent of one core</td></tr>
+          <tr><td>Redis policy keys</td><td>{fmt(charts[2].first)} at the start, {fmt(charts[2].last)} at the end (two per simulated player)</td></tr>
+          <tr><td>Postgres sessions</td><td>{fmt(pg.first)} at the start, {fmt(pg.last)} at the end. That is the gateway's pool filling to its cap of 8, plus Postgres's own background processes. It stayed at {fmt(pg.last)} for the second half of the run.</td></tr>
+          <tr><td>Readiness failures</td><td>{d.ready_failures} in {d.samples} samples</td></tr>
+        </tbody>
+      </table>
+    </details>
+
+    <p class="gw-perf-note">
+      Measured on {d.env}, on {d.generated}. It is a single machine with a fake backend that answers
+      instantly, so the figures show what the gateway adds (policy, validation, signing, audit and the
+      Redis and Postgres round trips), not what your game's own backend will cost. {fmt(d.denied)} calls were
+      denied on purpose by the demo's limits and the fake backend, and are not failures. Repeat it yourself with
+      <code>scripts/soak.sh</code>, described in the <a href={`${import.meta.env.BASE_URL}operate/runbook/`}>runbook</a>.
+    </p>
+  </div>
+) : (
+  <p class="gw-perf-note">Soak results are published after each release.</p>
+)}

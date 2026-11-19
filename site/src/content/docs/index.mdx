@@ -18,6 +18,7 @@ hero:
 
 import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
 import HowItWorks from '../../components/HowItWorks.astro';
+import Performance from '../../components/Performance.astro';
 
 <div class="gw-section">
 
@@ -40,6 +41,19 @@ import HowItWorks from '../../components/HowItWorks.astro';
 </p>
 
 <HowItWorks />
+
+</div>
+
+<div class="gw-section">
+
+## How much does it add?
+
+<p class="gw-lede">
+  A one hour soak test at a steady rate, with real Redis and Postgres behind the gateway. Flat lines
+  mean the gateway does not leak memory, connections or policy state while it runs.
+</p>
+
+<Performance />
 
 </div>
 
