@@ -100,6 +100,7 @@ func newClient(safe bool) *http.Client {
 		Proxy:                 nil,
 		DialContext:           d.DialContext,
 		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100, // the default is 2, which closes connections to the one backend host under load
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   5 * time.Second,
 		ResponseHeaderTimeout: 10 * time.Second,

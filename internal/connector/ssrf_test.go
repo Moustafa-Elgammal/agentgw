@@ -105,3 +105,16 @@ func TestRedirectsAreNotFollowed(t *testing.T) {
 		t.Fatal("the redirect target was contacted")
 	}
 }
+
+// A gateway talks to one backend host. With Go's default of 2 idle connections per host, load
+// above 2 concurrent calls closes connections after every call, fills TIME_WAIT and ends in
+// backend_unavailable. The pool must keep enough idle connections to reuse.
+func TestClientKeepsIdleConnectionsForOneBackendHost(t *testing.T) {
+	tr, ok := newClient(true).Transport.(*http.Transport)
+	if !ok {
+		t.Fatal("transport is not an *http.Transport")
+	}
+	if tr.MaxIdleConnsPerHost < 64 {
+		t.Fatalf("MaxIdleConnsPerHost = %d, want at least 64", tr.MaxIdleConnsPerHost)
+	}
+}
