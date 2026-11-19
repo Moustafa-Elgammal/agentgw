@@ -7,6 +7,8 @@ var Routes = []string{
 	"POST /register",
 	"GET /authorize",
 	"POST /authorize",
+	"POST /authorize/oidc",
+	"GET /authorize/oidc/callback",
 	"POST /token",
 	"POST /v1/studio/link-tickets",
 	"GET /v1/studio/grants",

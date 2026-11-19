@@ -31,6 +31,7 @@ const FILE_ROUTES = new Map([
   ['docs/DECISIONS.md', 'project/decisions'],
   ['docs/ROADMAP.md', 'project/roadmap'],
   ['docs/THIRD-PARTY-LICENSES.md', 'project/third-party-licenses'],
+  ['docs/design/oidc-consent.md', 'project/design-oidc-consent'],
   ['CHANGELOG.md', 'project/changelog'],
   ['CONTRIBUTING.md', 'project/contributing'],
   ['SECURITY.md', 'project/security'],

@@ -53,6 +53,11 @@ type ServerConfig struct {
 	// A missing or unparsable value falls back to RemoteAddr.
 	ClientIPHeader string
 
+	// OIDC, when set, adds "sign in with your game account" to the consent page: the player
+	// proves who they are at the studio's identity provider instead of typing a link code. Nil
+	// (the default) leaves the consent page and the routes exactly as they were.
+	OIDC OIDCLogin
+
 	Now func() time.Time // nil means time.Now
 }
 
@@ -104,6 +109,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("OPTIONS /register", preflight("POST", "Content-Type"))
 	mux.HandleFunc("GET /authorize", s.authorizeForm)
 	mux.HandleFunc("POST /authorize", s.authorizeSubmit)
+	// Always registered, so the route list is the same for every configuration. Without an OIDC
+	// flow both answer 404 (see oidcEnabled).
+	mux.HandleFunc("POST /authorize/oidc", s.oidcStart)
+	mux.HandleFunc("GET /authorize/oidc/callback", s.oidcCallback)
 	mux.Handle("POST /token", cors("", http.HandlerFunc(s.token)))
 	mux.Handle("OPTIONS /token", preflight("POST", "Content-Type"))
 	mux.HandleFunc("POST /v1/studio/link-tickets", s.mintTicket)

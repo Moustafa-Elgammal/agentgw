@@ -626,6 +626,61 @@ paths:
         '302': {description: "Redirect to the client's redirect URI with a code (or an error)."}
         '401': {description: "The link code did not work (HTML)."}
         '429': {description: "Too many attempts (HTML). Retry-After says when."}
+  /authorize/oidc:
+    post:
+      tags: [OAuth]
+      operationId: authorizeOIDCStart
+      summary: Start sign-in with the studio's identity provider
+      description: |
+        The consent page's "Sign in with your game account" button. The form carries the same authorization
+        parameters as `POST /authorize` plus `scope_choice`. The gateway validates them, stores them in an encrypted
+        session cookie, and redirects to the identity provider (authorization code with PKCE, `state` and `nonce`).
+        Answers 404 when the gateway has no identity provider configured. See docs/design/oidc-consent.md.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [client_id, redirect_uri, code_challenge, code_challenge_method, scope_choice]
+              properties:
+                client_id: {type: string}
+                redirect_uri: {type: string}
+                response_type: {type: string}
+                code_challenge: {type: string}
+                code_challenge_method: {type: string}
+                state: {type: string, maxLength: 512}
+                resource: {type: string}
+                scope: {type: string}
+                scope_choice: {type: string, description: '`coach` or `operator`.'}
+      responses:
+        '303': {description: "Redirect to the identity provider, with the session cookie set."}
+        '400': {description: "The request is invalid (HTML). Nothing is redirected."}
+        '404': {description: "No identity provider is configured."}
+        '429': {description: "Too many attempts (HTML). Retry-After says when."}
+        '503': {description: "The identity provider could not be reached (HTML)."}
+  /authorize/oidc/callback:
+    get:
+      tags: [OAuth]
+      operationId: authorizeOIDCCallback
+      summary: Where the identity provider sends the player back
+      description: |
+        Register this URL, on the gateway's public address, as the redirect URI at the identity provider. It needs the
+        session cookie set by `POST /authorize/oidc`, a matching `state`, and a code the gateway can exchange for an ID
+        token that verifies (signature, issuer, audience, nonce, expiry). On success it records the grant for the player
+        named by the configured claim and redirects to the client's redirect URI with a code. A failure after the session
+        is known redirects there with `error`; a missing, expired or replayed session shows an error page and redirects
+        nowhere.
+      parameters:
+        - {name: state, in: query, required: true, schema: {type: string}}
+        - {name: code, in: query, required: false, schema: {type: string}}
+        - {name: error, in: query, required: false, description: "Set by the identity provider when the player refused.", schema: {type: string}}
+        - {name: iss, in: query, required: false, description: "RFC 9207 issuer, checked when present.", schema: {type: string}}
+      responses:
+        '303': {description: "Redirect to the client's redirect URI with a code or an error."}
+        '400': {description: "No trustworthy session: nothing is redirected (HTML)."}
+        '404': {description: "No identity provider is configured."}
+        '429': {description: "Too many attempts."}
   /token:
     post:
       tags: [OAuth]

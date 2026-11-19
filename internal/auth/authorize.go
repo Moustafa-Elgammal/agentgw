@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/subtle"
 	"html/template"
 	"net/http"
@@ -79,7 +80,7 @@ func (s *Server) authorizeForm(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, req, verified, code, desc)
 		return
 	}
-	s.render(w, http.StatusOK, req, "")
+	s.render(w, r, http.StatusOK, req, "")
 }
 
 func (s *Server) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
@@ -99,20 +100,14 @@ func (s *Server) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	scope := Scope(r.PostForm.Get("scope_choice"))
-	allowed := false
-	for _, a := range req.allowedScopes {
-		if a == scope {
-			allowed = true
-		}
-	}
-	if !allowed {
-		s.render(w, http.StatusBadRequest, req, "Choose what the agent may do.")
+	if !scopeAllowed(req, scope) {
+		s.render(w, r, http.StatusBadRequest, req, "Choose what the agent may do.")
 		return
 	}
 	// Guessing a ticket is the only attack on this form, so every submission counts.
 	if !s.attempts.allow(s.clientAddr(r)) {
 		w.Header().Set("Retry-After", "60")
-		s.render(w, http.StatusTooManyRequests, req, "Too many attempts. Wait a minute and try again.")
+		s.render(w, r, http.StatusTooManyRequests, req, "Too many attempts. Wait a minute and try again.")
 		return
 	}
 	ticket := normalizeTicket(r.PostForm.Get("ticket"))
@@ -123,23 +118,33 @@ func (s *Server) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	if ticket == "" || err != nil || tenant != s.cfg.Tenant {
 		// Wrong, used and expired tickets look the same.
-		s.render(w, http.StatusUnauthorized, req, "That link code did not work. Ask the game for a new one.")
+		s.render(w, r, http.StatusUnauthorized, req, "That link code did not work. Ask the game for a new one.")
 		return
 	}
-	g, err := s.cfg.Store.UpsertGrant(r.Context(), Grant{Tenant: tenant, Player: player, ClientID: req.client.ID, Resource: req.resource, Scope: scope})
+	plain, err := s.grantAndCode(r.Context(), req, tenant, player, scope)
 	if err != nil {
-		s.render(w, http.StatusServiceUnavailable, req, "Something went wrong. Try again.")
-		return
-	}
-	plain, hash := NewToken()
-	if err := s.cfg.Store.PutCode(r.Context(), Code{
-		Hash: hash, ClientID: req.client.ID, RedirectURI: req.redirectURI, Challenge: req.challenge,
-		Resource: req.resource, Scope: g.Scope, Tenant: tenant, Player: player, Expires: s.cfg.Now().Add(CodeTTL),
-	}); err != nil {
-		s.render(w, http.StatusServiceUnavailable, req, "Something went wrong. Try again.")
+		s.render(w, r, http.StatusServiceUnavailable, req, "Something went wrong. Try again.")
 		return
 	}
 	s.redirectBack(w, r, req, url.Values{"code": {plain}})
+}
+
+// grantAndCode records the player's consent as a grant and mints the one use authorization
+// code that goes back to the client. Both the link code path and the OIDC path end here, so a
+// grant looks the same whichever way the player proved who they are.
+func (s *Server) grantAndCode(ctx context.Context, req *authzRequest, tenant, player string, scope Scope) (string, error) {
+	g, err := s.cfg.Store.UpsertGrant(ctx, Grant{Tenant: tenant, Player: player, ClientID: req.client.ID, Resource: req.resource, Scope: scope})
+	if err != nil {
+		return "", err
+	}
+	plain, hash := NewToken()
+	if err := s.cfg.Store.PutCode(ctx, Code{
+		Hash: hash, ClientID: req.client.ID, RedirectURI: req.redirectURI, Challenge: req.challenge,
+		Resource: req.resource, Scope: g.Scope, Tenant: tenant, Player: player, Expires: s.cfg.Now().Add(CodeTTL),
+	}); err != nil {
+		return "", err
+	}
+	return plain, nil
 }
 
 // fail reports an authorization error. Until the client and redirect URI are verified
@@ -175,7 +180,7 @@ func (s *Server) redirectBack(w http.ResponseWriter, r *http.Request, req *authz
 // securityHeaders sets the headers every page of the authorization server carries.
 // formTarget is the redirect URI of the request. Browsers apply form-action to the
 // redirect that answers a form post, so the consent page must allow that one origin.
-func securityHeaders(w http.ResponseWriter, formTarget string) {
+func securityHeaders(w http.ResponseWriter, formTarget string, extraFormOrigins ...string) {
 	h := w.Header()
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Frame-Options", "DENY") // the consent page must never be framed (clickjacking)
@@ -189,6 +194,9 @@ func securityHeaders(w http.ResponseWriter, formTarget string) {
 			}
 		}
 		formAction += " " + u.Scheme + "://" + host
+	}
+	for _, o := range extraFormOrigins {
+		formAction += " " + o
 	}
 	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action "+formAction+"; frame-ancestors 'none'; base-uri 'none'")
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -217,13 +225,15 @@ input[type=text]{font:1.2rem monospace;letter-spacing:.1em;width:10rem}
 <fieldset><legend>What may it do?</legend>
 {{range $i, $s := .Scopes}}<label><input type="radio" name="scope_choice" value="{{$s.Value}}" {{if eq $i 0}}checked{{end}}> <strong>{{$s.Label}}</strong>: {{$s.Help}}</label>{{end}}
 </fieldset>
-<label>Link code from the game <input type="text" name="ticket" autocomplete="off" autocapitalize="characters" maxlength="9" placeholder="XXXX-XXXX" required></label>
+<label>Link code from the game <input type="text" name="ticket" autocomplete="off" autocapitalize="characters" maxlength="9" placeholder="XXXX-XXXX"{{if not .OIDC}} required{{end}}></label>
 <p><button type="submit" name="decision" value="allow">Allow</button><button type="submit" name="decision" value="deny" formnovalidate>Deny</button></p>
+{{if .OIDC}}<p>Or sign in with your game account instead of a code:</p>
+<p><button type="submit" formaction="/authorize/oidc" formnovalidate>Sign in with your game account</button></p>{{end}}
 </form></body></html>`))
 
 type scopeChoice struct{ Value, Label, Help string }
 
-func (s *Server) render(w http.ResponseWriter, status int, req *authzRequest, errMsg string) {
+func (s *Server) render(w http.ResponseWriter, r *http.Request, status int, req *authzRequest, errMsg string) {
 	var scopes []scopeChoice
 	var scopeParam []string
 	for _, sc := range req.allowedScopes {
@@ -239,10 +249,20 @@ func (s *Server) render(w http.ResponseWriter, status int, req *authzRequest, er
 	if u, err := url.Parse(req.redirectURI); err == nil {
 		host = u.Host
 	}
-	securityHeaders(w, req.redirectURI)
+	// Offer the sign-in button only when the IdP answered discovery. Browsers apply form-action to
+	// the redirect that answers a form post, so the IdP's origin must be allowed as well.
+	var extra []string
+	oidcOn := false
+	if s.cfg.OIDC != nil {
+		if origin, ok := s.cfg.OIDC.AuthOrigin(r.Context()); ok {
+			extra, oidcOn = []string{origin}, true
+		}
+	}
+	securityHeaders(w, req.redirectURI, extra...)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_ = consentTmpl.Execute(w, map[string]any{
+		"OIDC":       oidcOn,
 		"ClientName": req.client.Name, "RedirectHost": host, "ClientID": req.client.ID,
 		"RedirectURI": req.redirectURI, "Challenge": req.challenge, "State": req.state,
 		"Resource": req.resource, "ScopeParam": strings.Join(scopeParam, " "), "Scopes": scopes, "Error": errMsg,
