@@ -69,6 +69,25 @@ header-trusting dev API is not mounted.
   limiter is per process, and dynamic client registration is unauthenticated (rate limited and
   capped, see below, but the cap is per process).
 
+## Manifest uploads (M4)
+
+- Manifest upload, list and activate are signed with a separate admin key, never the player-call
+  key, and go through their own replay checked verifier. Without `AGENTGW_ADMIN_SECRET` they are not mounted.
+- Uploads are validated before they are stored. Rollback validates again. A failure changes nothing.
+- Every version records the signed actor and a hash, so a change to what agents can call is attributable.
+- Studio and admin keys rotate without downtime: the verifier accepts a set of keys, loaded from
+  key files and reloaded on SIGHUP. A failed reload keeps the keys in use. Secrets and ids are
+  never logged. The replay cache survives a rotation.
+
+## Activity feed (M4)
+
+- The player feed is signed with the studio key and filtered to the signed player and the gateway
+  tenant on the server. Query parameters cannot change either. The admin feed needs the admin
+  key, so a leaked studio key cannot read other players' activity.
+- Rows hold the argument hash, never the arguments, and no tenant. Replays are refused and
+  responses are `no-store`.
+- Events are deleted after `--audit-retention`. The in memory store holds only the newest 10000.
+
 ## Planned
 
 SSRF-safe dialer for connector URLs, tenant isolation with row-level security,

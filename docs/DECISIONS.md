@@ -228,3 +228,61 @@ exactly one wins.
 
 **Limits.** The cache is per process. Several replicas each accept a captured request once.
 A shared store is the fix and needs its own entry when the gateway is scaled out.
+
+## Manifest upload and rollback (M4)
+
+**Decision.** `internal/manifeststore` keeps every uploaded manifest version (Postgres with
+`--postgres-url`, otherwise memory) and one active pointer per tenant. Studio-signed endpoints
+upload, list and activate versions (PROTOCOL.md).
+
+- **Separate admin key.** Manifest calls are signed with `--admin-key-id` and
+  `AGENTGW_ADMIN_SECRET`, not the player-call key. Whoever holds it decides which tools agents
+  can call, so a leak of the player key must not reach it. `X-AG-Player` is the acting admin and
+  is stored on the version. The endpoints are off when the secret is unset.
+- **The store is the source of truth after the first upload.** `--manifest` only seeds a tenant
+  that has no active version (actor `bootstrap`). Restarting with a different file does not
+  override uploaded versions.
+- **Rollback re-validates.** Activating an old version parses it with the current validator, so
+  a version the rules no longer accept is refused instead of served.
+- **Poll sync.** Each replica compares the active version id to what it serves every
+  `--manifest-poll` and swaps the tool set atomically (`Service.SetManifest`). A call already
+  running finishes with the tools it started with. No push channel until the relay (M5).
+- **Not per tenant yet.** One tenant per process (`--tenant`), as in M3.
+- **Versions are kept forever.** No pruning in M4.
+
+## Key rotation for studio and admin keys
+
+**Decision.** `studiosig.Verifier` holds a set of keys (id to secret), replaced atomically by
+`SetKeys`. `--studio-keys-file` and `--admin-keys-file` name JSON files `{"id":"secret"}` that
+are added to `--studio-key-id` and `--admin-key-id`. SIGHUP reloads them. A file that fails to
+load (bad JSON, no keys, empty id or secret) is logged and the keys in use stay, so a typo never
+locks a studio out. Secrets and ids are never logged.
+
+**Rotation procedure.** Add the new key to the file and send SIGHUP. Move the studio to it.
+Remove the old key and send SIGHUP again. The replay cache is keyed by key id and idempotency
+key and survives `SetKeys`, so rotating never reopens a replay.
+
+**Not covered.** The gateway's own signing key toward the backend (`--key-id`, one secret) is
+unchanged. Backends already pick the secret by `X-AG-Key-Id`, so they can accept two keys while
+the operator restarts the gateway with the new one. Per-tenant key sets come with multi tenancy.
+
+## Activity feed
+
+**Decision.** The audit log becomes readable through `audit.Store` (Query, Prune), kept by
+`audit.Ring` (in memory, newest 10000, dev only) or `internal/audit/pgstore` (with
+`--postgres-url`). The gateway writes to the structured log and to the store. Two studio-signed
+endpoints (`internal/activity`) serve it: a player feed on the studio key and an admin feed on the
+admin key (`docs/PROTOCOL.md`).
+
+- **Hash only.** The feed returns what the audit log holds: tool, tier, outcome, code, time and the
+  hash of the arguments. Arguments were never stored (rule 5), so there is nothing to leak.
+- **Own events only.** The player feed forces the signed player and the gateway tenant onto the
+  query. A parameter cannot widen it. Only the admin feed can name another player.
+- **Paging by id.** Newest first, `before` is the id cursor, and the handler fetches one extra row to
+  know whether `next_before` is needed. Ids order events within one store.
+- **Retention.** `--audit-retention` (default 720h, `0` is forever), pruned hourly.
+- **A failed audit write never fails a call.** `Record` has no error return; the Postgres store
+  reports failures through `OnError`, which the gateway logs.
+- **Not yet.** No export, no streaming and no aggregate counts. They can come with the M6
+  dashboards. With several replicas on Postgres ids are global; on the in memory Ring they are
+  per process.

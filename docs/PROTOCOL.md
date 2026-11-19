@@ -139,3 +139,75 @@ that cannot make that move (for example approving a denied one) gives
 A replayed approve or deny is refused by the studio replay rule above, so a captured request
 cannot move a confirmation again. An approval stays bound to one exact tool call and expires with
 the confirmation after 10 minutes.
+
+## Studio manifest endpoints
+
+A studio uploads and rolls back its tool manifest with these endpoints, so onboarding needs no
+backend code and no restart. They are signed exactly like the other studio calls (same five
+headers, same replay rule) but with the **admin key** (`--admin-key-id`, secret
+`AGENTGW_ADMIN_SECRET`), never the key that signs player calls. `X-AG-Player` names the acting
+admin (for example a CI job or a person) and is recorded as the version's `actor`. Without
+`AGENTGW_ADMIN_SECRET` the endpoints are not mounted. Bodies up to 1 MiB are accepted
+(`413 {"error":"too_large"}` above that). A bad signature gives `401 {"error":"invalid_client"}`
+and a store failure gives `503 {"error":"temporarily_unavailable"}`.
+
+`PUT /v1/studio/manifest` validates the body, stores it as a new version, activates it and
+serves it from the next request on. The body is JSON, or YAML when `Content-Type` is
+`application/yaml`. It returns `201` with the version:
+
+```json
+{"id":3,"sha256":"ab12...","actor":"ci","created_at":"2026-01-02T03:04:05Z","tools":12,"active":true}
+```
+
+An invalid manifest gives `422 {"error":"invalid_manifest","detail":"..."}` and changes nothing.
+
+`GET /v1/studio/manifest` returns `{"version":{...},"manifest":{...}}` for the active version,
+or `404 not_found` if none.
+
+`GET /v1/studio/manifest/versions` returns `{"versions":[...]}`, newest first, with `active` set
+on one.
+
+`POST /v1/studio/manifest/versions/{id}/activate` makes an existing version active again (a
+rollback) and returns it. The stored document is validated again; if it no longer passes the
+current rules the answer is `422` and nothing changes. An unknown id is `404 not_found`.
+
+Other replicas pick up the new active version within `--manifest-poll` (default 15s).
+
+## Activity feed
+
+What a player's agents did, read back from the audit log. Two read only endpoints, signed like
+the other studio calls (same five headers, same replay rule, `Cache-Control: no-store`).
+
+`GET /v1/studio/activity` is the **player feed**. Sign it with the studio key. The signed
+`X-AG-Player` is the player whose events are returned. A `player` or `tenant` query parameter is
+ignored, so a player can only ever read their own events.
+
+`GET /v1/studio/admin/activity` is the **admin feed**. Sign it with the admin key. It reads any
+player of the gateway's tenant, accepts an extra `player` filter, and its rows name the player.
+`X-AG-Player` is the acting admin and is not a filter.
+
+Query parameters (all optional): `tool`, `outcome` (`ok`, `denied` or `error`), `since` (RFC 3339,
+events at or after it), `limit` (default 50, at most 200, larger values are clamped) and `before`
+(a cursor, only events with a smaller id). A malformed value gives
+`400 {"error":"invalid_request"}`. A store failure gives `503 {"error":"temporarily_unavailable"}`.
+A bad signature gives `401 {"error":"invalid_client"}`.
+
+Events come newest first. When more remain, the response carries `next_before`: pass it as
+`before` to get the next page. It is omitted on the last page.
+
+```json
+{"events":[{"id":42,"time":"2026-03-01T10:05:00Z","tool":"sell_resource","tier":"action","outcome":"denied","code":"daily_amount_cap","args_sha256":"9f2c..."}],"next_before":41}
+```
+
+An admin row also has `"player":"alice"`. `outcome` and `code` are the audit event's: `ok`,
+`denied` (with the denial code) or `error` (for example `backend_unavailable`). Rows carry the
+SHA-256 of the arguments, never the arguments, so match an entry to a game action by the
+timestamp and tool, or by the hash if you can compute it. Gateways keep events for
+`--audit-retention` (default 30 days; `0` keeps them forever).
+
+## Rotating studio keys
+
+Studio and admin requests name their key in `X-AG-Key-Id`. The gateway accepts every key in its
+current set, so rotate without downtime: add the new key (key file plus SIGHUP), switch your
+backend to sign with it, then remove the old key. A request signed with a removed key gets
+`401 {"error":"invalid_client"}`.

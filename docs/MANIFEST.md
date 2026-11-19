@@ -1,5 +1,8 @@
 # Manifest
 
+A running gateway takes its manifest from the store: `--manifest` only seeds a fresh deployment.
+After that, upload new versions and roll back through `/v1/studio/manifest` (see PROTOCOL.md).
+
 A manifest lists the tools a game exposes. Two formats compile to the same structure: JSON
 (the wire format) and YAML (the authoring format, `.yaml` or `.yml`). Both reject unknown
 fields and duplicate keys. `examples/city/manifest.yaml` is the YAML twin of `manifest.json`,

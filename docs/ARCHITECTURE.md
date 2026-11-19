@@ -26,13 +26,16 @@ Expected failures are results (`ok:false`, `code`, `message`), not protocol erro
 cmd/gateway        dev server (M0)
 cmd/gwctl          manifest CLI
 internal/core      shared types: Tool, Tier, Principal, Caps, Result
-internal/manifest  strict JSON manifest loader and validator
+internal/manifest  strict JSON and YAML manifest loader and validator
+internal/manifeststore  versioned manifests: Store, Manager (upload, rollback, bootstrap, sync), admin Handler, pgstore, storetest contract
+internal/studiosig one verifier for studio and admin signed requests: key sets, rotation, replay cache
 internal/policy    Policy and Switchboard interfaces, in-memory store
 internal/policy/redisstore  shared Redis store (Lua scripts, atomic across replicas)
 internal/policy/policytest  the contract every store must pass
 internal/connector Connector interface + level 0 REST connector
-internal/audit     Auditor interface, memory and slog implementations
-internal/gateway   the pipeline
+internal/audit     Auditor and Store interfaces, Ring (memory), slog, pgstore (Postgres)
+internal/activity  activity feed endpoints: player feed (studio key) and admin feed (admin key)
+internal/gateway   the pipeline (the tool set is swapped whole by SetManifest, safe during calls)
 internal/confirm   player confirmations: Store interface, memory store, pgstore (Postgres), confirmtest contract
 internal/auth/pgstore   auth.Store on Postgres (clients, tickets, codes, grants, token hashes); Migrate and Prune
 internal/httpapi   dev-only JSON front door (also the player's approve and deny endpoints)
@@ -43,7 +46,7 @@ examples/city      example manifest and a fake backend
 
 Planned packages (see ROADMAP): `auth` and `authserver`
 (OAuth 2.1), `store` (Postgres, Redis), `relay` (WebSocket relay for client-authoritative
-games), `admin` (studio and player APIs), `obs` (metrics and tracing).
+games), `obs` (metrics and tracing).
 
 ## Stdio bridge
 

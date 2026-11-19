@@ -1,4 +1,6 @@
-# agentgw
+# agentgw: contributor guide
+
+Works for people and for coding agents. Claude Code reads it through `CLAUDE.md`.
 
 Go gateway between a player's AI agent and a game backend. See `README.md` and `docs/`.
 
@@ -46,7 +48,7 @@ Packages: `core` (types), `manifest`, `policy`, `confirm`, `connector`, `audit`,
 Details: `docs/ARCHITECTURE.md`, protocol: `docs/PROTOCOL.md`, security: `docs/SECURITY-MODEL.md`.
 
 `make fmt` only checks (fails if `gofmt -l` lists files); it does not rewrite. Fix with
-`gofmt -w` inside the container. Slash commands `/check` and `/m1-spike` live in `.claude/commands/`.
+`gofmt -w` inside the container. The `/check` slash command (format, vet, test in Docker) lives in `.claude/commands/` for Claude Code users.
 The gateway is exercised end to end through the MCP endpoint (`/mcp`, `internal/mcpserver`) or the
 dev HTTP API (`internal/httpapi`) against `examples/city/`. Both trust `X-Dev-Player`. The MCP
 transport is stateless on purpose: identity is resolved per request, never carried by a session.
@@ -62,11 +64,15 @@ transport is stateless on purpose: identity is resolved per request, never carri
    the PR and an entry in `docs/DECISIONS.md`, and ask first.
 7. Compatibility changes (manifest format, signed request, policy semantics) get an entry in
    `docs/DECISIONS.md` first.
-8. Sign off commits (`git commit -s`). No real game or employer material anywhere.
+8. Sign off commits (`git commit -s`). No third-party or proprietary material anywhere (no real game, company or customer data).
 9. Anything that needs a service or tool gets a Dockerfile target or compose service. Never ask
    the user to install it on the host.
 
-## Current focus: M3 (see `docs/ROADMAP.md`)
+## Current focus: M5 next, M4 done (see `docs/ROADMAP.md`)
+
+M4 so far: versioned manifests (`internal/manifeststore`, memory plus `pgstore`), hot swap in
+`gateway.Service.SetManifest`, and admin-signed `/v1/studio/manifest` endpoints (separate admin key,
+`AGENTGW_ADMIN_SECRET`). Key rotation for studio and admin keys is done (key files, SIGHUP). The activity feed is done (`internal/activity`, `internal/audit` Store and `pgstore`, `--audit-retention`): a player feed on the studio key and an admin feed on the admin key. M4 exit criterion met. The M3 notes below still apply.
 
 M0 to M2 are done. Pipeline and signing; MCP endpoint (`internal/mcpserver`, stateless streamable
 HTTP); JSON or YAML manifests; conformance suite v0 (`test/conformance`); kill switches

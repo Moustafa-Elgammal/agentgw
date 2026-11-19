@@ -8,9 +8,11 @@ daily caps, cooldowns, kill switches), calls the studio's backend with a signed 
 and records every attempt in an audit log. It works with any backend language, because
 the contract is a manifest plus a signed HTTP request, not a library.
 
-**Status: M0 to M2 done, M3 nearly done.** The core pipeline, MCP transport, Redis and Postgres
-stores and player confirmations work and are tested. Players link their agent with OAuth (M3, see
-below). OIDC login at consent is the one open M3 item. See [docs/ROADMAP.md](docs/ROADMAP.md).
+**Status: M0 to M2 and M4 done, M3 nearly done.** The core pipeline, MCP transport, Redis
+and Postgres stores and player confirmations work and are tested. Players link their agent with
+OAuth (M3, see below). A studio can upload and roll back its manifest and rotate its signing keys
+without a restart, and read an activity feed of what agents did (M4). The one open M3 item is OIDC login at consent. Next is the relay (M5). See
+[docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Two modes for players
 
@@ -32,6 +34,9 @@ below). OIDC login at consent is the one open M3 item. See [docs/ROADMAP.md](doc
 | Policy store in Redis (shared across replicas, fails closed) and kill switches | `internal/policy/redisstore`, `internal/policy` |
 | MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
 | OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
+| Versioned manifests: upload, list, roll back, hot swap, replica sync (admin-signed, memory or Postgres) | `internal/manifeststore`, `internal/manifeststore/pgstore` |
+| Studio key rotation: key sets, key files, reload on SIGHUP | `internal/studiosig` |
+| Activity feed: what a player's agents did, player and admin views, retention (memory or Postgres) | `internal/activity`, `internal/audit/pgstore` |
 | Manifest CLI | `cmd/gwctl` |
 
 Not yet: OIDC login at consent, relay for client-authoritative games (M5). Set `--postgres-url` to
@@ -52,10 +57,13 @@ Without `--dev-auth`, `/mcp` needs a bearer token. An MCP client discovers every
 
 The game's own UI uses signed studio endpoints for the player's side: list and revoke linked
 agents (`/v1/studio/grants`) and approve or deny a pending confirmation
-(`/v1/studio/confirmations`). See `docs/PROTOCOL.md`.
+(`/v1/studio/confirmations`). The studio's own tooling manages the manifest through
+`/v1/studio/manifest`, signed with a separate admin key. See `docs/PROTOCOL.md`.
 
 Flags: `--public-url` (issuer, default `http://127.0.0.1:8080`), `--studio-key-id` (secret is
-`AGENTGW_SIGNING_SECRET`), `--register-per-hour`, `--max-clients`, `--client-ip-header`. The scripted end to end test is `test/conformance/auth_test.go`.
+`AGENTGW_SIGNING_SECRET`), `--studio-keys-file` and `--admin-keys-file` (extra keys for rotation,
+reloaded on SIGHUP), `--admin-key-id` (secret is `AGENTGW_ADMIN_SECRET`), `--manifest-poll`
+(how often replicas pick up a manifest change, default 15s), `--register-per-hour`, `--max-clients`, `--client-ip-header`. The scripted end to end test is `test/conformance/auth_test.go`.
 Grants live in memory for now, so restarting the gateway makes players link again.
 
 ## Try it
@@ -113,6 +121,7 @@ stderr (stdout carries the protocol and is never used for logs).
 - [Signed request protocol](docs/PROTOCOL.md)
 - [Security model](docs/SECURITY-MODEL.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Open source release, docs site and guides plan](docs/OPEN-SOURCE-PLAN.md)
 - [Open decisions](docs/DECISIONS.md)
 
 ## License
