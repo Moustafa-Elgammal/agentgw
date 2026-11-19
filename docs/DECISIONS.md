@@ -422,3 +422,49 @@ API returns. Nothing about the loader or the wire format changed.
 - Manifest blocks in the docs are fenced as `yaml manifest` and checked by `test/docs`. A JSON
   block is allowed only where the page is about the JSON form, and a test lists those pages.
 
+## Kill switch API (M10)
+
+The only way to set a kill switch was the dev admin API, which trusts a header and must stay on
+loopback. The studio needs a real one for incidents.
+
+- **Admin key, separate endpoints.** `GET`, `PUT` and `DELETE /v1/studio/switches` are signed with the
+  admin key, the one that guards manifest uploads, and are mounted only when an admin key exists. The
+  player key cannot reach them. The signed `X-AG-Player` is the acting admin.
+- **One tenant, no cross-tenant wildcard.** The tenant is always the gateway's own. A body names a
+  `tool`, a `player`, both, or neither (the whole game). The dev API's empty tenant, which means
+  every tenant, is not offered, so one admin call cannot reach past its own game.
+- **Strict input.** Unknown fields, a trailing document, a tool that is not a valid tool name, a
+  player with spaces, control characters or more than 128 characters, and a reason over 200
+  characters are `400 invalid_request`. A body over 4 KiB is `413`.
+- **PUT and DELETE, not a toggle.** On and off are idempotent. The state after a call is what the
+  call named, whatever it was before.
+- **Fail closed.** A store error is `503 temporarily_unavailable` and nothing is audited as done.
+- **Audit, without free text.** Each change is an event with tool `admin.switch.on` or
+  `admin.switch.off`, tier `admin`, the admin as `player`, and a hash of the target as the argument
+  hash. The `Event` model is unchanged. The reason is only logged (`kill switch changed`), because
+  the audit store keeps hashes, not text.
+- **Replicas.** With Redis the switch applies to every replica on the next call. Without Redis it is
+  per process and lost on restart, like every other policy state.
+
+## Coach cap and request limits (M10)
+
+- **`--max-scope` caps grants, it does not rewrite them.** The cap is applied where scope is
+  used: the consent page and `parseAuthz` (a client asking for `operator` under a coach cap is told
+  `invalid_scope`, not silently downgraded), token and refresh responses, `ResourceServer.Authenticate`,
+  and `gateway.Service` (`WithMaxScope`, used by `Call` and by the MCP tool list through `Capped`).
+  A stored operator grant stays operator in the store, so raising the cap restores it. Code and
+  dev callers with no scope become coach under a coach cap. The default is operator, so nothing
+  changes unless a studio sets it. The value is configuration, not global state.
+- **Body limits in one middleware.** `internal/bodylimit.FrontDoor` reads each body once, up to its
+  cap, and answers 413 `{"error":"too_large"}` before the SDK or a handler sees it. It also stops a
+  client that lies about Content-Length. Caps: 1 MiB (`--max-body`), 64 KiB for `/register`,
+  `/token`, `/authorize` and `/v1/studio/`, and the manifest upload is exempt because its handler
+  enforces its own 1 MiB. The handlers' own limits stay as a second line.
+- **Timeouts.** `ReadHeaderTimeout` 5 s, `ReadTimeout` 15 s and `WriteTimeout` 30 s were already
+  set; `IdleTimeout` 120 s is new. `WriteTimeout` stays because `/mcp` is stateless with plain JSON
+  responses (no SSE), and the relay WebSocket is hijacked, which clears the connection deadlines.
+- **MCP errors, nothing added.** The plan was a friendlier answer for a missing
+  `MCP-Protocol-Version`. Probing the SDK showed it accepts a missing header on stateless `/mcp`,
+  and that the bare 400s plain `curl` users hit come from a missing `Accept` header or an
+  unsupported version, each with a clear one-line message. A wrapper would have refused calls the
+  SDK accepts, so it was dropped and troubleshooting names the real causes.

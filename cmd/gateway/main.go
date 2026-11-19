@@ -26,9 +26,11 @@ import (
 	auditpg "github.com/Moustafa-Elgammal/agentgw/internal/audit/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/auth"
 	authpg "github.com/Moustafa-Elgammal/agentgw/internal/auth/pgstore"
+	"github.com/Moustafa-Elgammal/agentgw/internal/bodylimit"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/connector"
+	"github.com/Moustafa-Elgammal/agentgw/internal/core"
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
 	"github.com/Moustafa-Elgammal/agentgw/internal/httpapi"
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifest"
@@ -41,6 +43,7 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/relay"
 	"github.com/Moustafa-Elgammal/agentgw/internal/relay/redisbus"
 	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
+	"github.com/Moustafa-Elgammal/agentgw/internal/switchapi"
 )
 
 // auditPruneLoop deletes audit events older than the retention once an hour until ctx ends.
@@ -175,6 +178,8 @@ func main() {
 		manifestPoll = flag.Duration("manifest-poll", 15*time.Second, "how often to pick up a manifest version activated elsewhere (0 disables)")
 		relayTTL     = flag.Duration("relay-ticket-ttl", 60*time.Second, "how long a relay ticket stays valid (secret: AGENTGW_RELAY_SECRET; unset disables the relay)")
 		opsAddr      = flag.String("ops-addr", "127.0.0.1:9090", "listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables)")
+		maxScope     = flag.String("max-scope", os.Getenv("AGENTGW_MAX_SCOPE"), "the most any player may grant: coach (read only, recommended for a first pilot) or operator. Empty means operator")
+		maxBody      = flag.Int64("max-body", 1048576, "largest request body in bytes. OAuth and studio endpoints keep their lower caps, manifest upload its own")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	showVersion := flag.Bool("version", false, "print the version and exit")
@@ -192,6 +197,17 @@ func main() {
 	if *manifestPath == "" || *backendURL == "" || secret == "" {
 		log.Error("usage: AGENTGW_SIGNING_SECRET=... gateway --manifest m.json --backend-url http://host:port")
 		os.Exit(2)
+	}
+	scopeCap := core.Scope(*maxScope)
+	if scopeCap == "" {
+		scopeCap = core.ScopeOperator
+	}
+	if !scopeCap.Valid() {
+		log.Error("usage: --max-scope must be coach or operator", "got", *maxScope)
+		os.Exit(2)
+	}
+	if scopeCap == core.ScopeCoach {
+		log.Info("max-scope is coach", "note", "every grant is read only, whatever the player chose")
 	}
 	m, err := manifest.LoadFile(*manifestPath)
 	if err != nil {
@@ -275,7 +291,8 @@ func main() {
 		connector.Mux{HTTP: connector.NewHTTP(*backendURL, *keyID, []byte(secret), connOpts...), Relay: relay.NewConnector(relayHub)},
 		audit.Multi{audit.Slog{L: log}, auditStore},
 		gateway.WithConfirmations(confirmations),
-		gateway.WithObserver(metrics))
+		gateway.WithObserver(metrics),
+		gateway.WithMaxScope(scopeCap))
 	ready = append(ready, obs.Check{Name: "manifest", Fn: func(context.Context) error {
 		if len(svc.Tools()) == 0 {
 			return errors.New("no tools loaded")
@@ -319,6 +336,7 @@ func main() {
 		rs := &auth.ResourceServer{
 			Store: authStore, Resource: issuer + "/mcp", Tenant: *tenant,
 			MetadataURL: issuer + "/.well-known/oauth-protected-resource/mcp",
+			MaxScope:    scopeCap,
 		}
 		// One replay cache for every studio-signed endpoint, so a captured request cannot be
 		// replayed against a different endpoint either.
@@ -327,7 +345,7 @@ func main() {
 			os.Exit(1)
 		}
 		as := auth.NewServer(auth.ServerConfig{
-			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant,
+			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant, MaxScope: scopeCap,
 			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret), Verifier: sv,
 			RegisterPerHour: *registerHour, MaxClients: *maxClients, ClientIPHeader: *clientIPHdr,
 		})
@@ -349,6 +367,9 @@ func main() {
 		mountRelay(log, mux, relayHub, *tenant, sv, *relayTTL)
 		if adminSecret := os.Getenv("AGENTGW_ADMIN_SECRET"); adminSecret != "" || *adminKeys != "" {
 			av := studiosig.New(studiosig.Config{MaxBody: manifeststore.MaxUpload})
+			if switchapi.MaxBody > manifeststore.MaxUpload {
+				panic("switchapi.MaxBody must not exceed the admin verifier body limit")
+			}
 			if !reloadKeys(log, av, *adminKeyID, []byte(adminSecret), *adminKeys, &reloaders) {
 				os.Exit(1)
 			}
@@ -356,6 +377,7 @@ func main() {
 			mux.Handle("/v1/studio/manifest", mh)
 			mux.Handle("/v1/studio/manifest/", mh)
 			mux.Handle(activity.AdminPath, activity.AdminHandler(auditStore, *tenant, av))
+			mux.Handle(switchapi.Path, switchapi.Handler(switches, av, *tenant, audit.Multi{audit.Slog{L: log}, auditStore}))
 		} else {
 			log.Info("manifest endpoints not mounted", "reason", "neither AGENTGW_ADMIN_SECRET nor --admin-keys-file is set")
 		}
@@ -363,8 +385,12 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr: *addr, Handler: metrics.Middleware(mux),
+		Addr: *addr, Handler: metrics.Middleware(bodylimit.FrontDoor(mux, *maxBody)),
+		// WriteTimeout is safe here: /mcp answers with plain JSON (no streaming) and the relay
+		// WebSocket is hijacked, which clears the connection deadlines. IdleTimeout frees
+		// keep-alive connections that clients forgot.
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second,
+		IdleTimeout: 120 * time.Second,
 	}
 	if *opsAddr != "" {
 		ops := &http.Server{

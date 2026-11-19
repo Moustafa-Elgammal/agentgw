@@ -7,6 +7,18 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## [Unreleased]
 
+### Added
+
+- Studio kill switch API: `GET`, `PUT` and `DELETE /v1/studio/switches`, signed with the admin key.
+  A tool, a player or the whole game can be switched off and on without a restart. Every change is
+  an audit event (`admin.switch.on`, `admin.switch.off`).
+
+- `--max-scope coach|operator` (`AGENTGW_MAX_SCOPE`, Helm `config.maxScope`): a studio can cap every
+  grant at read only for a first pilot. The consent page offers only coach, tokens and refreshes
+  report coach, and stored operator grants act as coach until the cap is raised.
+- `--max-body`: request bodies are capped at the front door (1 MiB, 64 KiB for OAuth and studio
+  endpoints) with a clean `413 {"error":"too_large"}`. Keep-alive connections close after 120 s idle.
+
 ### Changed
 
 - Examples, tutorials and docs now write manifests in YAML. JSON is still supported and stored.

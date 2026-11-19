@@ -18,6 +18,9 @@ runs in the client can use a WebSocket relay instead.
 - **Coach**: read-only. State, prices, advice.
 - **Operator**: limited actions on the player's behalf, inside caps the studio controls.
 
+A studio can start a pilot read only for everyone with `--max-scope coach`, then raise it to
+operator later.
+
 ## Quickstart
 
 You only need Docker with Compose v2. Nothing is installed on your machine.

@@ -126,6 +126,31 @@ On the ops port:
 and `confirmation_unavailable`. Everything else that is not `ok` is a normal denial (rate limit,
 cap, cooldown, validation, scope, kill switch).
 
+## Pilot rollout: coach first
+
+Start a pilot read only, then raise the cap when it has been quiet.
+
+1. Run with `--max-scope=coach` (or `AGENTGW_MAX_SCOPE=coach`; Helm: `config.maxScope: coach`).
+   Every agent is read only, whatever the player chose or an older grant says. The consent page
+   offers only Coach, a client that asks for `scope=operator` is refused with `invalid_scope`,
+   tokens and refreshes report `coach`, and action tools are not listed. A call that names one
+   anyway is `scope_insufficient`.
+2. Watch the activity feed and `gateway_calls_total` for a few days. Read tools should show up
+   as `ok`, and there should be no `scope_insufficient` you did not expect.
+3. Move to operator by restarting with `--max-scope=operator` (the default). Stored operator
+   grants are back in force as they were: the cap never rewrites a grant a player made earlier.
+   Players who linked while the cap was coach hold coach grants and need to link again to give
+   operator.
+
+The cap applies to every front door, including `--dev-auth`.
+
+## Request limits
+
+Request bodies are capped at the front door: 1 MiB by default (`--max-body`), 64 KiB for the OAuth
+endpoints and the studio API, and the manifest upload keeps its own 1 MiB. An oversized body gets
+`413 {"error":"too_large"}` before any handler reads it. The server also closes keep-alive
+connections after 120 seconds idle.
+
 ## Symptoms and actions
 
 | Symptom or alert | Likely cause | Do this |
@@ -172,10 +197,28 @@ A rollback is also the quickest way to take a tool away from agents without a re
 
 ## Kill switches and revoking access
 
-- A kill switch blocks a tier, tool or player in the policy store. The only HTTP surface today is
-  the dev admin API (`/v1/admin/switches`, needs `--dev-auth` and `X-Dev-Admin: true`), so it is
-  for demos, not production.
-- In production use the signed studio endpoints instead: upload a manifest without the tool (or
+- A kill switch blocks a tool, a player or the whole game on the next call, on every replica.
+  Set it with the admin key (the same one that uploads manifests), using the `studiocall` helper
+  or any client that signs like [PROTOCOL.md](PROTOCOL.md):
+
+  ```bash
+  # turn a tool off, with a reason for the log
+  studiocall --key-id admin-1 --secret-env AGENTGW_ADMIN_SECRET --player ops-alice \
+    --body '{"tool":"build_structure","reason":"duplicate items"}' PUT /v1/studio/switches
+  studiocall --key-id admin-1 --secret-env AGENTGW_ADMIN_SECRET --player ops-alice GET /v1/studio/switches
+  # turn it back on
+  studiocall --key-id admin-1 --secret-env AGENTGW_ADMIN_SECRET --player ops-alice \
+    --body '{"tool":"build_structure"}' DELETE /v1/studio/switches
+  ```
+
+  Body fields: `tool`, `player`, `reason`. Leave `tool` and `player` out to switch the whole game
+  off. Only one switch per target exists, and on or off twice is harmless. A switch blocks every
+  tier it matches, reads included. The agent gets `switched_off`. Each change is an audit event
+  (`admin.switch.on` or `admin.switch.off`, with the admin in `player`) in the admin activity feed,
+  and a `kill switch changed` warning in the log carries the reason. Switches live in Redis, so
+  without `--redis-addr` they are per process and lost on restart. The endpoint exists only when an
+  admin key is set. The dev admin API (`/v1/admin/switches`) is for demos only.
+- Other ways to cut access: upload a manifest without the tool (or
   roll back), or revoke a player's agents with `DELETE /v1/studio/grants/{id}` or
   `DELETE /v1/studio/grants` (effective immediately; tokens are looked up, not self-contained).
 

@@ -15,6 +15,7 @@ What is built today and where it lives in the code. The roadmap is in [ROADMAP.m
 | Dev HTTP API around the pipeline | `internal/httpapi`, `cmd/gateway` |
 | Player confirmations for tools marked `confirm` (approve or deny, single use, memory or Postgres) | `internal/confirm`, `internal/confirm/pgstore` |
 | Policy store in Redis (shared across replicas, fails closed) and kill switches | `internal/policy/redisstore`, `internal/policy` |
+| Studio kill switch API: switch a tool, a player or the game off and on, audited (admin-signed) | `internal/switchapi` |
 | MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
 | OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
 | Versioned manifests: upload, list, roll back, hot swap, replica sync (admin-signed, memory or Postgres) | `internal/manifeststore`, `internal/manifeststore/pgstore` |
@@ -26,6 +27,8 @@ Not yet: OIDC login at consent. Set `--postgres-url` to
 keep clients, grants and approvals across restarts.
 With `--dev-auth` (the compose demo) the dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.
+
+Pilot control: `--max-scope coach` makes the whole gateway read only whatever players granted, and `--max-body` caps request bodies at the front door.
 
 Also built: the relay for client-authoritative games (`internal/relay`, see [PROTOCOL.md](PROTOCOL.md)), metrics and health on a separate ops listener (`internal/obs`), an SSRF-safe connector, a Helm chart, a runbook and a load tool.
 
