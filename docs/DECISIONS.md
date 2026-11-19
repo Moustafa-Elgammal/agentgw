@@ -596,5 +596,6 @@ alternative to the link code. It is off unless `--oidc-issuer` is set.
 - **Tested end to end against a fake provider with real keys**, through the same `buildOIDC` that
   `main` calls: client registration, the redirect, the code exchange with PKCE and the client
   secret, the ID token signature, and the token exchange. A token signed by an unpublished key and
-  a callback without the starting browser's cookie both end without a grant. Not yet tested against
-  a real provider such as Dex or Keycloak.
+  a callback without the starting browser's cookie both end without a grant. Also run end to end
+  against two real servers: Dex (tutorial 8) and Keycloak (`scripts/oidc-keycloak-check.sh`). Not yet
+  tested against a hosted provider.

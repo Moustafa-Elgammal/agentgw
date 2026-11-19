@@ -234,7 +234,12 @@ In the Helm chart: the `oidc` values, with both secrets read from `existingSecre
 
 ## What is not built
 
-- A tutorial.
-- A test against a real provider (for example a Dex container). The fake provider proves the
-  protocol and the checks; it cannot prove a given vendor's quirks, such as which claim carries a
-  stable player id or how it rotates keys.
+- A public-client mode (no client secret, PKCE only).
+- Tests against hosted providers (Google, Okta, Entra ID). The fake provider proves the protocol and
+  the checks, and Dex (tutorial 8) and Keycloak (`scripts/oidc-keycloak-check.sh`) prove two real
+  servers, but a vendor can still differ in which claim carries a stable player id or how it
+  rotates keys.
+
+Keycloak notes from the check: set the player claim to `preferred_username` (Keycloak's ID token has
+no `name` unless the user has a first and last name); the realm needs the exact callback as a
+redirect URI; and `KC_HOSTNAME` must be the address the gateway uses for the issuer.
