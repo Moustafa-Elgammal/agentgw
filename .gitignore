@@ -18,3 +18,5 @@ site/src/content/docs/*
 !site/src/content/docs/404.md
 /.tutorial-keys/
 .tutorial-tmp/
+/soak-results/
+.DS_Store

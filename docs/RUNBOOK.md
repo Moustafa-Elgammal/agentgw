@@ -284,6 +284,19 @@ docker compose run --rm load --url http://gateway:8080 --duration 1h --rate 100 
   --concurrency 32 --players 500 --max-error-rate 0.001 --max-p99 500ms
 ```
 
+The soak script does the whole thing, including a clean stack and resource sampling:
+
+```bash
+DURATION=1h RATE=100 PLAYERS=2000 scripts/soak.sh
+```
+
+It starts the compose stack under its own project name, runs the load tool, and samples the
+gateway, Redis and Postgres every 30 seconds (memory, Redis keys, Postgres connections, CPU,
+`/readyz`). It writes `soak-results/<time>/` with `load.txt`, `samples.csv` and `summary.txt`, and
+exits nonzero if the load tool breaches a threshold, gateway memory or Postgres connections grow
+by more than `MAX_GROWTH_PCT` (default 30) between the first and last quarter, or `/readyz` ever
+fails. Use `DURATION=2m` to check the script itself.
+
 Flags: `--rate` (0 means as fast as the workers go), `--concurrency`, `--players` (each player has
 its own limits), `--mix tool=weight,...` (default `get_city_state=8,sell_resource=2`),
 `--args-file` (JSON `{"tool": {args}}` for tools not built in), `--min-rps`, `--timeout`.
