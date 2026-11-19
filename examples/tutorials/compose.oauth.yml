@@ -1,0 +1,18 @@
+# Tutorials 4 and 5: the demo stack with real OAuth instead of --dev-auth.
+#
+#   docker compose -f docker-compose.yml -f examples/tutorials/compose.oauth.yml up -d --build
+#
+# Dev only. The signing secret is the placeholder from docker-compose.yml (dev-secret).
+# --public-url is the address clients use. The tutorials run their clients inside the compose
+# network, so it is http://gateway:8080. For a real deployment it is your public HTTPS URL.
+services:
+  gateway:
+    command:
+      - --manifest=/etc/agentgw/manifest.json
+      - --backend-url=http://city-backend:9090
+      - --backend-allow-private
+      - --addr=0.0.0.0:8080
+      - --redis-addr=redis:6379
+      - --ops-addr=0.0.0.0:9091
+      - --public-url=http://gateway:8080
+      - --tenant=city

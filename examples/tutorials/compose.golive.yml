@@ -1,0 +1,31 @@
+# Tutorial 6: go-live settings on top of compose.oauth.yml.
+#
+#   docker compose -f docker-compose.yml -f examples/tutorials/compose.oauth.yml \
+#     -f examples/tutorials/compose.golive.yml up -d --build gateway
+#
+# Adds the admin key (manifest upload and rollback), a studio key file for rotation, and a
+# trusted client address header. Dev only: every secret here is a placeholder.
+services:
+  gateway:
+    command:
+      - --manifest=/etc/agentgw/manifest.json
+      - --backend-url=http://city-backend:9090
+      - --backend-allow-private
+      - --addr=0.0.0.0:8080
+      - --redis-addr=redis:6379
+      - --ops-addr=0.0.0.0:9091
+      - --public-url=http://gateway:8080
+      - --tenant=city
+      - --manifest-poll=2s
+      - --studio-keys-file=/etc/agentgw-keys/studio-keys.json
+      - --client-ip-header=X-Forwarded-For
+    environment:
+      - AGENTGW_ADMIN_SECRET=golive-demo-admin-secret-0001
+    volumes:
+      - ${TUTORIAL_KEYS_DIR:-./.tutorial-keys}:/etc/agentgw-keys:ro
+  # The toolchain container plays the studio backend, so it knows the studio's secrets.
+  dev:
+    environment:
+      - AGENTGW_ADMIN_SECRET=golive-demo-admin-secret-0001
+      - STUDIO_A_SECRET=golive-demo-studio-a-secret-0001
+      - STUDIO_B_SECRET=golive-demo-studio-b-secret-0002
