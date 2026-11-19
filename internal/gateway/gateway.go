@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
@@ -34,7 +35,7 @@ import (
 
 // Service executes tool calls.
 type Service struct {
-	tools   map[string]core.Tool
+	tools   atomic.Pointer[map[string]core.Tool] // swapped whole by SetManifest, never mutated
 	policy  policy.Policy
 	conn    connector.Connector
 	audit   audit.Auditor
@@ -50,21 +51,30 @@ func WithConfirmations(c confirm.Store) Option { return func(s *Service) { s.con
 
 // New builds a Service from a validated manifest.
 func New(m *manifest.Manifest, p policy.Policy, c connector.Connector, a audit.Auditor, opts ...Option) *Service {
-	tools := make(map[string]core.Tool, len(m.Tools))
-	for _, t := range m.Tools {
-		tools[t.Name] = t
-	}
-	s := &Service{tools: tools, policy: p, conn: c, audit: a}
+	s := &Service{policy: p, conn: c, audit: a}
+	s.SetManifest(m)
 	for _, o := range opts {
 		o(s)
 	}
 	return s
 }
 
+// SetManifest replaces the tool set. It is safe to call while calls are running: a call that
+// already looked up its tool finishes with the version it started with, and the next call
+// sees the new set. The manifest must already be validated.
+func (s *Service) SetManifest(m *manifest.Manifest) {
+	tools := make(map[string]core.Tool, len(m.Tools))
+	for _, t := range m.Tools {
+		tools[t.Name] = t
+	}
+	s.tools.Store(&tools)
+}
+
 // Tools lists the tools sorted by name.
 func (s *Service) Tools() []core.Tool {
-	out := make([]core.Tool, 0, len(s.tools))
-	for _, t := range s.tools {
+	tools := *s.tools.Load()
+	out := make([]core.Tool, 0, len(tools))
+	for _, t := range tools {
 		out = append(out, t)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -87,7 +97,7 @@ func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw j
 		})
 	}
 
-	t, ok := s.tools[name]
+	t, ok := (*s.tools.Load())[name]
 	if !ok {
 		record(core.Tool{}, "denied", "unknown_tool")
 		return core.Denied("unknown_tool", fmt.Sprintf("no tool named %q. List tools first.", name))
