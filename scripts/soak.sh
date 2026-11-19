@@ -23,6 +23,10 @@ PROJECT="agentgw-soak"
 OUT="soak-results/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$OUT"
 DC=(docker compose -p "$PROJECT")
+# AUDIT_QUEUE=1 runs the gateway with the batching audit writer (--audit-queue) and, at the end,
+# checks that every call left an audit row and that nothing was dropped.
+AUDIT_QUEUE="${AUDIT_QUEUE:-}"
+[ -n "$AUDIT_QUEUE" ] && DC=(docker compose -p "$PROJECT" -f docker-compose.yml -f scripts/soak.audit-queue.yml)
 
 say() { printf '==> %s\n' "$*"; }
 
@@ -86,6 +90,18 @@ kill "$SAMPLER" 2>/dev/null || true; SAMPLER=""
 
 say "metrics at the end"
 curl -s http://127.0.0.1:9091/metrics > "$OUT/metrics.txt" || true
+AUDIT_RC=0
+if [ -n "$AUDIT_QUEUE" ]; then
+  sleep 3 # let the last batch flush
+  rows=$("${DC[@]}" exec -T postgres psql -U agentgw -d agentgw -tAc "select count(*) from audit_events" | tr -d '\r ')
+  dropped=$(awk '/^audit_dropped_total/{n+=$2} END{print n+0}' "$OUT/metrics.txt")
+  depth=$(awk '$1=="audit_queue_depth"{print $2}' "$OUT/metrics.txt")
+  {
+    echo "audit rows in Postgres: $rows; dropped: $dropped; queue depth at the end: ${depth:-?}"
+    grep -E '^audit_(flush_duration_seconds_(sum|count)|batch_size_(sum|count)|flush_errors_total)' "$OUT/metrics.txt" || true
+  } | tee "$OUT/audit.txt"
+  [ "$dropped" = "0" ] || { echo "FAIL: audit events were dropped"; AUDIT_RC=1; }
+fi
 "${DC[@]}" logs --no-color gateway 2>&1 | grep -c '"level":"ERROR"' > "$OUT/gateway-error-lines.txt" || true
 
 python3 - "$OUT" "$MAX_GROWTH_PCT" <<'PY' | tee "$OUT/summary.txt"
@@ -136,4 +152,4 @@ PY
 TREND_RC=${PIPESTATUS[0]}
 errs=$(cat "$OUT/gateway-error-lines.txt" 2>/dev/null || echo 0)
 say "gateway ERROR log lines: $errs; load exit $LOAD_RC; trend exit $TREND_RC; results in $OUT"
-[ "$LOAD_RC" -eq 0 ] && [ "$TREND_RC" -eq 0 ]
+[ "$LOAD_RC" -eq 0 ] && [ "$TREND_RC" -eq 0 ] && [ "$AUDIT_RC" -eq 0 ]

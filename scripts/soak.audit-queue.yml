@@ -1,0 +1,13 @@
+# Compose override for `AUDIT_QUEUE=10000 scripts/soak.sh`: the same gateway with the batching
+# audit writer on. A command list replaces the base one, so the flags are repeated here.
+services:
+  gateway:
+    command:
+      - --manifest=/etc/agentgw/manifest.yaml
+      - --backend-url=http://city-backend:9090
+      - --backend-allow-private
+      - --addr=0.0.0.0:8080
+      - --redis-addr=redis:6379
+      - --ops-addr=0.0.0.0:9091
+      - --dev-auth
+      - --audit-queue=10000
