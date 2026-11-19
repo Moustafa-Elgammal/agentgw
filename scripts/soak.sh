@@ -49,20 +49,26 @@ mem_mb() { # container name -> MiB in use
 }
 cid() { "${DC[@]}" ps -q "$1"; }
 
-echo "t_sec,gateway_mib,gateway_cpu_pct,redis_mib,redis_keys,postgres_mib,pg_conns,ready" > "$OUT/samples.csv"
+echo "t_sec,gateway_mib,gateway_cpu_pct,redis_mib,redis_keys,postgres_mib,pg_conns,ready,pool_total,pool_max,goroutines" > "$OUT/samples.csv"
 sampler() {
   local start; start=$(date +%s)
   while true; do
-    local now t gw cpu rd keys pg conns ready
+    local now t gw cpu rd keys pg conns ready pm ptot pmax gor
     now=$(date +%s); t=$((now - start))
     gw=$(mem_mb "$(cid gateway)")
     cpu=$(docker stats --no-stream --format '{{.CPUPerc}}' "$(cid gateway)" 2>/dev/null | tr -d '%')
     rd=$(mem_mb "$(cid redis)")
     keys=$("${DC[@]}" exec -T redis redis-cli dbsize 2>/dev/null | tr -d '\r' || echo 0)
     pg=$(mem_mb "$(cid postgres)")
-    conns=$("${DC[@]}" exec -T postgres psql -U agentgw -d agentgw -tAc 'select count(*) from pg_stat_activity' 2>/dev/null | tr -d '\r' || echo 0)
+    # Only client sessions, and not this probe itself: Postgres always shows its own background
+    # processes (about five) in pg_stat_activity, which are not the gateway's connections.
+    conns=$("${DC[@]}" exec -T postgres psql -U agentgw -d agentgw -tAc "select count(*) from pg_stat_activity where backend_type = 'client backend' and pid <> pg_backend_pid()" 2>/dev/null | tr -d '\r' || echo 0)
+    pm=$(curl -s http://127.0.0.1:9091/metrics 2>/dev/null || true)
+    ptot=$(printf '%s\n' "$pm" | awk '$1=="agentgw_pgx_pool_total_conns"{print $2}')
+    pmax=$(printf '%s\n' "$pm" | awk '$1=="agentgw_pgx_pool_max_conns"{print $2}')
+    gor=$(printf '%s\n' "$pm" | awk '$1=="go_goroutines"{print $2}')
     ready=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9091/readyz || echo 000)
-    echo "$t,$gw,$cpu,$rd,$keys,$pg,$conns,$ready" >> "$OUT/samples.csv"
+    echo "$t,$gw,$cpu,$rd,$keys,$pg,$conns,$ready,$ptot,$pmax,$gor" >> "$OUT/samples.csv"
     sleep "$INTERVAL"
   done
 }
@@ -97,8 +103,29 @@ if len(rows) >= 8:
         a, b = st.mean(v[:q]), st.mean(v[-q:])
         g = (b - a) / a * 100 if a else 0
         print(f"{name:14} first quarter {a:9.1f}  last quarter {b:9.1f}  change {g:+6.1f}%  max {max(v):.1f}")
-        if name in ("gateway_mib", "pg_conns") and g > limit:
+        if name == "gateway_mib" and g > limit:
             print(f"  FAIL: {name} grew more than {limit:.0f}%"); bad = True
+    # Postgres connections: a pool fills up to its cap in the first minutes and then stays level,
+    # so growth since the start is expected. A leak is a count above the cap, or one that is still
+    # climbing in the second half of the run.
+    conns = col("pg_conns")
+    caps = [float(r["pool_max"]) for r in rows if r.get("pool_max")]
+    cap = max(caps) if caps else None
+    third, fourth = st.mean(conns[2 * q:3 * q]), st.mean(conns[-q:])
+    if cap is not None:
+        print(f"pg client conns: peak {max(conns):.0f} against a pool cap of {cap:.0f}; third quarter {third:.1f}, last quarter {fourth:.1f}")
+        if max(conns) > cap:
+            print("  FAIL: more Postgres client connections than the pool may open"); bad = True
+    else:
+        print(f"pg client conns: peak {max(conns):.0f}; third quarter {third:.1f}, last quarter {fourth:.1f} (pool cap not exposed by this gateway build)")
+    if fourth - third > 0.5:
+        print("  FAIL: Postgres connections still growing in the second half"); bad = True
+    gor = [float(r["goroutines"]) for r in rows if r.get("goroutines")]
+    if len(gor) >= 8:
+        g3, g4 = st.mean(gor[2 * q:3 * q]), st.mean(gor[-q:])
+        print(f"goroutines: third quarter {g3:.0f}, last quarter {g4:.0f}, max {max(gor):.0f}")
+        if g4 > g3 * 1.2 + 10:
+            print("  FAIL: goroutines still growing in the second half"); bad = True
     notready = [r for r in rows if r["ready"] != "200"]
     print(f"readyz not 200 in {len(notready)} of {len(rows)} samples")
     bad = bad or bool(notready)

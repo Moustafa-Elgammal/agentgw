@@ -24,10 +24,21 @@ const overflow = "other"
 type Registry struct {
 	mu      sync.Mutex
 	metrics map[string]*family
+	hooks   []func()
 }
 
 // NewRegistry builds an empty Registry.
 func NewRegistry() *Registry { return &Registry{metrics: map[string]*family{}} }
+
+// OnScrape registers fn to run at the start of every WriteTo, before anything is rendered.
+// Collectors use it to copy values that live elsewhere (connection pools, the Go runtime)
+// into gauges at scrape time, so no ticker is needed and a value is never older than the
+// scrape. fn must be fast and must not call WriteTo.
+func (r *Registry) OnScrape(fn func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hooks = append(r.hooks, fn)
+}
 
 type kind int
 
@@ -119,6 +130,18 @@ func (c *Counter) Add(v float64, values ...string) {
 	s := c.f.get(values)
 	c.f.mu.Lock()
 	s.val += v
+	c.f.mu.Unlock()
+}
+
+// Set sets the series to v. It is for collectors that mirror a counter kept elsewhere (a pool
+// statistic, the GC pause total): the source is monotonic, so the exposed series is too. A
+// value below the current one is ignored, so a source that restarts cannot make it go back.
+func (c *Counter) Set(v float64, values ...string) {
+	s := c.f.get(values)
+	c.f.mu.Lock()
+	if v > s.val {
+		s.val = v
+	}
 	c.f.mu.Unlock()
 }
 
@@ -217,6 +240,12 @@ func num(v float64) string {
 
 // WriteTo renders every metric, sorted by name and then by label values.
 func (r *Registry) WriteTo(w io.Writer) (int64, error) {
+	r.mu.Lock()
+	hooks := append([]func(){}, r.hooks...)
+	r.mu.Unlock()
+	for _, fn := range hooks {
+		fn()
+	}
 	r.mu.Lock()
 	fams := make([]*family, 0, len(r.metrics))
 	for _, f := range r.metrics {

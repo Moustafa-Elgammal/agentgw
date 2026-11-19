@@ -85,3 +85,24 @@ groups:
         annotations:
           summary: "No tool calls for 30 minutes"
           description: "May be normal off hours. If not, check the MCP endpoint and OAuth."
+
+      - alert: AgentgwPostgresPoolSaturated
+        expr: |
+          max by (instance) (agentgw_pgx_pool_acquired_conns / agentgw_pgx_pool_max_conns) > 0.9
+          and max by (instance) (rate(agentgw_pgx_pool_empty_acquire_total[5m])) > 0
+        for: 5m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }} is using over 90% of its Postgres connections and calls are waiting"
+          description: "Audit, auth and confirmation writes queue behind the pool. Raise --postgres-max-conns, check Postgres for slow queries, and compare against the connection limit of the database."
+
+      - alert: AgentgwGoroutinesGrowing
+        expr: |
+          min_over_time(go_goroutines[30m]) > 1000
+          and deriv(go_goroutines[1h]) > 0.1
+        for: 15m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $labels.instance }} goroutine count keeps growing ({{ $value | printf \"%.2f\" }} per second)"
+          description: "A leak or a stuck dependency. Take a goroutine profile if you have one, check the relay connection count and slow backend calls, then restart the replica."
+

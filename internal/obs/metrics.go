@@ -27,7 +27,7 @@ func NewMetrics(version string) *Metrics {
 		calls:      r.NewCounter("gateway_calls_total", "Tool calls by tool and outcome (ok, or the denial code).", "tool", "outcome"),
 		callDur:    r.NewHistogram("gateway_call_duration_seconds", "Tool call duration in seconds.", nil, "tool"),
 		relayConns: r.NewGauge("relay_connections", "Game client sockets held by this replica."),
-		relayCalls: r.NewCounter("relay_calls_total", "Relay calls by result (ok, denied, offline, error).", "result"),
+		relayCalls: r.NewCounter("relay_calls_total", "Relay calls by result (ok, denied, offline, busy, error).", "result"),
 		httpReqs:   r.NewCounter("http_requests_total", "HTTP requests by route pattern and status code.", "route", "code"),
 	}
 	r.NewGauge("agentgw_build_info", "Build information; the value is always 1.", "version").Set(1, version)
