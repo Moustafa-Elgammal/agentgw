@@ -1,8 +1,11 @@
 package auth_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -313,5 +316,39 @@ func TestOIDCCallbackIsRateLimited(t *testing.T) {
 	}
 	if l.completed > 10 {
 		t.Fatalf("Complete ran %d times, the limiter should stop it at 10", l.completed)
+	}
+}
+
+// An operator needs the reason a sign-in failed, and the agent must not get it: the log carries
+// the error, the redirect to the agent says only that sign-in failed.
+func TestOIDCFailureIsLoggedButNotShownToTheAgent(t *testing.T) {
+	var buf bytes.Buffer
+	l := &fakeLogin{}
+	clk := &clock{t: time.Now()}
+	st := auth.NewMemory(clk.now)
+	s := auth.NewServer(auth.ServerConfig{
+		Store: st, Issuer: testIssuer, Resource: testResource, Tenant: "t1",
+		StudioKeyID: studioKey, StudioSecret: studioSecret, Now: clk.now, OIDC: l,
+		Log: slog.New(slog.NewJSONHandler(&buf, nil)),
+	})
+	e := &env{t, s.Handler(), st, clk}
+	id := e.client("A", cb)
+	_, ch := pkce()
+	l.result = oidc.Result{Payload: payloadFor(id, cb, ch, auth.ScopeCoach)}
+	l.completeE = fmt.Errorf("%w: audience is not gw-client", oidc.ErrToken)
+
+	loc := location(t, e.oidcCallback())
+	if loc.Query().Get("error") != "access_denied" || loc.Query().Get("error_description") != "sign-in failed" {
+		t.Fatalf("redirect to the agent = %s", loc)
+	}
+	if strings.Contains(loc.String(), "audience") {
+		t.Errorf("the reason reached the agent: %s", loc)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "oidc sign-in failed") || !strings.Contains(out, "audience is not gw-client") {
+		t.Errorf("the failure was not logged with its reason: %q", out)
+	}
+	if strings.Contains(out, "sealed") {
+		t.Errorf("the log holds the session cookie: %q", out)
 	}
 }

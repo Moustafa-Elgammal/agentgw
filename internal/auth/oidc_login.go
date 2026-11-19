@@ -116,10 +116,12 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 		s.redirectBack(w, r, req, url.Values{"error": {"access_denied"}, "error_description": {"the player declined"}})
 		return
 	case errors.Is(err, oidc.ErrExchange), errors.Is(err, oidc.ErrDiscovery):
+		s.cfg.Log.Warn("oidc sign-in failed", "kind", "identity provider unavailable", "err", err)
 		s.redirectBack(w, r, req, url.Values{"error": {"temporarily_unavailable"}, "error_description": {"sign-in is not available right now"}})
 		return
 	case err != nil || res.Player == "":
 		// A token that fails verification says nothing about the player; the reason is for logs.
+		s.cfg.Log.Warn("oidc sign-in failed", "kind", "token rejected", "err", err)
 		s.redirectBack(w, r, req, url.Values{"error": {"access_denied"}, "error_description": {"sign-in failed"}})
 		return
 	}

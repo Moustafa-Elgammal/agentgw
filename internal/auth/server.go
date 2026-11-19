@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -58,6 +59,11 @@ type ServerConfig struct {
 	// (the default) leaves the consent page and the routes exactly as they were.
 	OIDC OIDCLogin
 
+	// Log receives operator facing events, today the reason an OIDC sign-in failed (the agent
+	// only ever sees "sign-in failed"). Nil discards them. It never receives tokens, codes or
+	// cookies.
+	Log *slog.Logger
+
 	Now func() time.Time // nil means time.Now
 }
 
@@ -80,6 +86,9 @@ func NewServer(cfg ServerConfig) *Server {
 		cfg.Now = time.Now
 	}
 	cfg.Issuer = strings.TrimRight(cfg.Issuer, "/")
+	if cfg.Log == nil {
+		cfg.Log = slog.New(slog.DiscardHandler)
+	}
 	if cfg.RegisterPerHour == 0 {
 		cfg.RegisterPerHour = 10
 	}

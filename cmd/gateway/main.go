@@ -513,6 +513,7 @@ func main() {
 		}
 		as := auth.NewServer(auth.ServerConfig{
 			OIDC:  oidcLogin,
+			Log:   log,
 			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant, MaxScope: scopeCap,
 			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret), Verifier: sv,
 			RegisterPerHour: *registerHour, MaxClients: *maxClients, ClientIPHeader: *clientIPHdr,
