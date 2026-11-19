@@ -15,6 +15,9 @@ type ResourceServer struct {
 	Resource    string // this gateway's MCP URL. Tokens must be bound to exactly this audience.
 	MetadataURL string // where the protected resource metadata is served
 	Tenant      string // the tenant this process serves
+	// MaxScope caps what any grant may do at call time. Coach turns every grant, including
+	// stored operator grants, into read only. Empty means no cap.
+	MaxScope Scope
 }
 
 // Challenge is the error Authenticate returns. It tells the HTTP layer what to put in
@@ -58,7 +61,7 @@ func (rs *ResourceServer) Authenticate(r *http.Request) (core.Principal, error) 
 		// A token issued for another resource must never work here (confused deputy).
 		return core.Principal{}, rs.challenge("invalid_token", "the token was not issued for this resource")
 	}
-	return core.Principal{TenantID: g.Tenant, PlayerID: g.Player, ClientID: g.ClientID, Scope: g.Scope}, nil
+	return core.Principal{TenantID: g.Tenant, PlayerID: g.Player, ClientID: g.ClientID, Scope: g.Scope.Cap(rs.MaxScope)}, nil
 }
 
 // MetadataHandler serves the OAuth protected resource metadata (RFC 9728), which
@@ -68,7 +71,7 @@ func (rs *ResourceServer) MetadataHandler(issuer string) http.Handler {
 		"resource":                 rs.Resource,
 		"authorization_servers":    []string{issuer},
 		"bearer_methods_supported": []string{"header"},
-		"scopes_supported":         []Scope{ScopeCoach, ScopeOperator},
+		"scopes_supported":         scopesUpTo(rs.MaxScope),
 		"resource_name":            "agentgw game gateway",
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

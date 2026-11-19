@@ -41,6 +41,21 @@ const (
 // Valid reports whether s is a known scope.
 func (s Scope) Valid() bool { return s == ScopeCoach || s == ScopeOperator }
 
+// Cap returns s limited to at most max. It is how an operator turns every grant into coach
+// during a pilot: Cap(ScopeCoach) lowers operator, and the empty (not scope-limited) scope,
+// to coach. An empty or operator max changes nothing. An unknown s stays as it is, so a corrupt
+// grant still allows nothing.
+func (s Scope) Cap(max Scope) Scope {
+	if max != ScopeCoach {
+		return s
+	}
+	switch s {
+	case "", ScopeOperator:
+		return ScopeCoach
+	}
+	return s
+}
+
 // Allows reports whether a grant with scope s may call a tool of tier t. The empty
 // scope means the caller is not scope-limited (dev auth, tests). Any other unknown
 // value allows nothing, so a corrupt grant fails closed.

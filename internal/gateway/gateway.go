@@ -35,12 +35,13 @@ import (
 
 // Service executes tool calls.
 type Service struct {
-	tools   atomic.Pointer[map[string]core.Tool] // swapped whole by SetManifest, never mutated
-	policy  policy.Policy
-	conn    connector.Connector
-	audit   audit.Auditor
-	confirm confirm.Store // nil: tools that need confirmation fail closed
-	obs     Observer      // nil: no metrics
+	tools    atomic.Pointer[map[string]core.Tool] // swapped whole by SetManifest, never mutated
+	policy   policy.Policy
+	conn     connector.Connector
+	audit    audit.Auditor
+	confirm  confirm.Store // nil: tools that need confirmation fail closed
+	obs      Observer      // nil: no metrics
+	maxScope core.Scope    // caps every principal's scope; empty means no cap
 }
 
 // Observer is told about every finished call. It must not block. tool is the manifest name,
@@ -55,6 +56,18 @@ func WithObserver(o Observer) Option { return func(s *Service) { s.obs = o } }
 
 // Option customizes a Service.
 type Option func(*Service)
+
+// WithMaxScope caps what any principal may do, whatever its grant says. ScopeCoach makes the
+// gateway read only for everyone, which is how a pilot starts. Empty or ScopeOperator changes
+// nothing.
+func WithMaxScope(max core.Scope) Option { return func(s *Service) { s.maxScope = max } }
+
+// Capped returns p with its scope limited by WithMaxScope. Front doors call it before they
+// decide which tools to list, so the list matches what Call will allow.
+func (s *Service) Capped(p core.Principal) core.Principal {
+	p.Scope = p.Scope.Cap(s.maxScope)
+	return p
+}
 
 // WithConfirmations sets where player confirmations live. Without it, tools
 // marked confirm are refused with confirmation_unavailable.
@@ -95,6 +108,7 @@ func (s *Service) Tools() []core.Tool {
 // Call runs one tool call for a principal. It never returns a Go error for an
 // expected failure; those come back as a Result the agent can read.
 func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw json.RawMessage) core.Result {
+	p = s.Capped(p)
 	if s.obs == nil {
 		return s.call(ctx, p, name, raw)
 	}

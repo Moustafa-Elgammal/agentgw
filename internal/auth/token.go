@@ -54,7 +54,7 @@ func (s *Server) codeGrant(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_target", "resource differs from the authorization request")
 		return
 	}
-	g, err := s.cfg.Store.UpsertGrant(r.Context(), Grant{Tenant: code.Tenant, Player: code.Player, ClientID: code.ClientID, Resource: code.Resource, Scope: code.Scope})
+	g, err := s.cfg.Store.UpsertGrant(r.Context(), Grant{Tenant: code.Tenant, Player: code.Player, ClientID: code.ClientID, Resource: code.Resource, Scope: code.Scope.Cap(s.cfg.MaxScope)})
 	if err != nil {
 		oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "try again later")
 		return
@@ -103,6 +103,6 @@ func (s *Server) issue(w http.ResponseWriter, r *http.Request, g Grant, refresh 
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token": access, "token_type": "Bearer", "expires_in": int(AccessTTL.Seconds()),
-		"refresh_token": refresh, "scope": string(g.Scope),
+		"refresh_token": refresh, "scope": string(g.Scope.Cap(s.cfg.MaxScope)),
 	})
 }

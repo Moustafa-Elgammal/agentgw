@@ -35,7 +35,10 @@ Rules 1 to 4, 7 and 8 are implemented and tested. Rules 5 and 6 need the MCP lay
 A `policy.Switch` turns off everything matching a tenant, tool and player (empty fields are
 wildcards). It is checked first in `Admit` and again in `Reserve`, answers `switched_off`, and
 is not charged to the rate limit. A switch blocks every tier it matches, reads included. If the
-switch store errors, `Admit` fails closed. Denials are audited like any other.
+switch store errors, `Admit` fails closed. Denials are audited like any other. The studio sets
+switches through `/v1/studio/switches`, signed with the admin key (never the player key). Every
+change is an audit event with the acting admin, and a failed store write is a `503`, not a
+silent success.
 
 ## OAuth and grants (M3)
 
@@ -120,8 +123,10 @@ they are untrusted. What the gateway does:
 | Oversized, nested or odd JSON | Strict decode, string limit, integer range in int64 | `internal/gateway/validate_inject_test.go` |
 | Duplicate or trailing JSON that shows the validator one thing and the backend another | Extra data refused, last duplicate wins for both | `internal/gateway/validate_inject_test.go` |
 
-Not covered here: a limit on the size of the request body itself, which belongs to the front
-door (MCP and HTTP servers), and a circuit breaker per backend.
+| Oversized request body | Front door cap before any handler reads (1 MiB, 64 KiB for OAuth and studio, manifest upload its own), clean 413 | `internal/bodylimit` tests |
+| A pilot that must not act yet | `--max-scope coach` caps every grant at read only, at the consent page, token issue and call time | `internal/auth/maxscope_test.go`, `internal/mcpserver` |
+
+Not covered here: a circuit breaker per backend.
 
 ## Planned
 

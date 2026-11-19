@@ -30,6 +30,7 @@ var envText = map[string]string{ //nolint:gosec // names of secrets, not secrets
 	"AGENTGW_RELAY_SECRET":   "Secret that signs relay tickets. Without it the relay is off and relay tools answer `client_offline`.",
 	"AGENTGW_POSTGRES_URL":   "Default of `--postgres-url`.",
 	"AGENTGW_REDIS_ADDR":     "Default of `--redis-addr`.",
+	"AGENTGW_MAX_SCOPE":      "Default of `--max-scope`.",
 }
 
 var ctlText = map[string]string{

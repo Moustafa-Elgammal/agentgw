@@ -49,7 +49,7 @@ type ctxKey struct{}
 func Handler(svc *gateway.Service, auth Authenticator) http.Handler {
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		p, _ := r.Context().Value(ctxKey{}).(core.Principal)
-		return newServer(svc, p, r.Context())
+		return newServer(svc, svc.Capped(p), r.Context())
 	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

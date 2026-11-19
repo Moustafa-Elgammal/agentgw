@@ -65,6 +65,12 @@ spec:
             {{- if .Values.config.clientIPHeader }}
             - --client-ip-header={{ .Values.config.clientIPHeader }}
             {{- end }}
+            {{- if .Values.config.maxScope }}
+            - --max-scope={{ .Values.config.maxScope }}
+            {{- end }}
+            {{- if .Values.config.maxBody }}
+            - --max-body={{ .Values.config.maxBody | int64 }}
+            {{- end }}
             {{- if .Values.config.backendAllowPrivate }}
             - --backend-allow-private
             {{- end }}

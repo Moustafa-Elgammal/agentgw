@@ -9,6 +9,8 @@ config:
   redisAddr: redis:6379
   clientIPHeader: X-Forwarded-For
   backendAllowPrivate: true
+  maxScope: coach
+  maxBody: 262144
   extraArgs: ["--max-clients=500"]
 imagePullSecrets: [{name: regcred}]
 ingress:

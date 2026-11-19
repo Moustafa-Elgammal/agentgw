@@ -21,6 +21,12 @@ config:
   # unless the backend really lives on a private network (it usually does in a cluster: set true
   # deliberately).
   backendAllowPrivate: false
+  # The most any player may grant: coach (read only) or operator. Empty means operator.
+  # Recommended for a first pilot: coach. Raise it to operator once coach has been quiet.
+  maxScope: operator
+  # Largest request body in bytes (the gateway default is 1048576). OAuth and studio endpoints
+  # keep their lower caps and manifest upload its own.
+  maxBody: 1048576
   keyID: gateway-1
   studioKeyID: studio-1
   adminKeyID: admin-1

@@ -247,3 +247,56 @@ func TestUnauthorizedCarriesTheChallenge(t *testing.T) {
 		t.Fatalf("status %d, header %q", resp.StatusCode, resp.Header.Get("WWW-Authenticate"))
 	}
 }
+
+func TestMaxScopeHidesActionToolsEvenForOperatorGrants(t *testing.T) {
+	m, err := manifest.Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name  string
+		max   core.Scope
+		scope core.Scope
+		want  string
+	}{
+		{"no cap, operator", "", core.ScopeOperator, "get_state,sell_resource"},
+		{"operator cap, operator", core.ScopeOperator, core.ScopeOperator, "get_state,sell_resource"},
+		{"coach cap, operator grant", core.ScopeCoach, core.ScopeOperator, "get_state"},
+		{"coach cap, coach grant", core.ScopeCoach, core.ScopeCoach, "get_state"},
+		{"coach cap, unlimited (dev) caller", core.ScopeCoach, "", "get_state"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), &fakeConn{}, &audit.Memory{}, gateway.WithMaxScope(tt.max))
+			auth := func(*http.Request) (core.Principal, error) {
+				return core.Principal{TenantID: "t", PlayerID: "p1", Scope: tt.scope}, nil
+			}
+			ts := httptest.NewServer(Handler(svc, auth))
+			defer ts.Close()
+			cs := connect(t, ts.URL, "")
+			res, err := cs.ListTools(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var names []string
+			for _, tl := range res.Tools {
+				names = append(names, tl.Name)
+			}
+			sort.Strings(names)
+			if strings.Join(names, ",") != tt.want {
+				t.Errorf("lists %v, want %s", names, tt.want)
+			}
+			// What is hidden is also refused. Over MCP the tool is simply unknown. Through the
+			// pipeline itself (the dev API path) the answer is scope_insufficient.
+			wantDenied := !strings.Contains(tt.want, "sell_resource")
+			_, mcpErr := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "sell_resource", Arguments: map[string]any{"resource": "food", "quantity": 1}})
+			if wantDenied != (mcpErr != nil) {
+				t.Errorf("MCP call error = %v, want denied=%v", mcpErr, wantDenied)
+			}
+			res2 := svc.Call(context.Background(), core.Principal{TenantID: "t", PlayerID: "p1", Scope: tt.scope}, "sell_resource", json.RawMessage(`{"resource":"food","quantity":1}`))
+			if wantDenied && res2.Code != "scope_insufficient" || !wantDenied && !res2.OK {
+				t.Errorf("pipeline call = %+v, want denied=%v", res2, wantDenied)
+			}
+		})
+	}
+}

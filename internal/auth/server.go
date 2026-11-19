@@ -24,6 +24,9 @@ type ServerConfig struct {
 	Issuer   string // public base URL, no trailing slash, e.g. https://gw.example
 	Resource string // the MCP URL tokens are bound to, e.g. https://gw.example/mcp
 	Tenant   string // the tenant this process serves
+	// MaxScope caps what a player may grant. Coach hides the operator choice on the consent
+	// page, rejects scope=operator, and clamps tokens and refreshes to coach. Empty means no cap.
+	MaxScope Scope
 
 	// The studio's signing key authenticates the request that mints link tickets,
 	// the same way the studio's backend verifies the gateway's calls.
@@ -109,6 +112,14 @@ func (s *Server) Handler() http.Handler {
 
 const maxBody = 64 << 10
 
+// scopesUpTo lists the scopes a player may choose under the cap.
+func scopesUpTo(max Scope) []Scope {
+	if max == ScopeCoach {
+		return []Scope{ScopeCoach}
+	}
+	return []Scope{ScopeCoach, ScopeOperator}
+}
+
 func (s *Server) metadata(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                         s.cfg.Issuer,
@@ -119,7 +130,7 @@ func (s *Server) metadata(w http.ResponseWriter, _ *http.Request) {
 		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":               []string{"S256"},
 		"token_endpoint_auth_methods_supported":          []string{"none"},
-		"scopes_supported":                               []Scope{ScopeCoach, ScopeOperator},
+		"scopes_supported":                               scopesUpTo(s.cfg.MaxScope),
 		"authorization_response_iss_parameter_supported": true,
 	})
 }

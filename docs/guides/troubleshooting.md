@@ -26,8 +26,8 @@ Order follows a call through the pipeline. Codes marked dev only come from the d
 
 - **Symptom:** Every call to a tool (or player) is refused with a message not to retry.
 - **Likely cause:** A kill switch matches the tool, player or tenant.
-- **Check:** Dev only: `GET /v1/admin/switches`. In production the cause is a switch set in the policy store.
-- **Fix:** Turn the switch off. Remember a switch blocks every tier it matches, reads included.
+- **Check:** `GET /v1/studio/switches`, signed with the admin key, lists the switches that are on. The admin activity feed shows who set one (`admin.switch.on`). Dev only: `GET /v1/admin/switches`.
+- **Fix:** Turn the switch off with `DELETE /v1/studio/switches` and the same body. Remember a switch blocks every tier it matches, reads included.
 
 ### `tier_disabled`
 
@@ -168,6 +168,18 @@ Order follows a call through the pipeline. Codes marked dev only come from the d
 - **Likely cause:** The request body is over the limit.
 - **Check:** The body size.
 - **Fix:** Send a smaller body. Dev only.
+
+### Plain HTTP to `/mcp`: a bare `400`
+
+Symptom: `400 Bad Request` with a one-line plain text body from `/mcp`.
+Cause, from what the MCP SDK says in the body: `Accept must contain both 'application/json' and 'text/event-stream'` (a plain `curl` sends neither), or `Unsupported protocol version` (the `MCP-Protocol-Version` header names a version the gateway does not speak). A missing `MCP-Protocol-Version` header is accepted.
+Fix: send `Accept: application/json, text/event-stream`, and either leave `MCP-Protocol-Version` out or set it to `2025-06-18`. MCP clients do both on their own.
+
+### Plain HTTP: `413 too_large`
+
+Symptom: `413 {"error":"too_large"}`.
+Cause: the request body is over the front door cap: 1 MiB by default (`--max-body`), 64 KiB for the OAuth and studio endpoints.
+Fix: send less. A manifest over 1 MiB cannot be uploaded; split the game into fewer, coarser tools.
 
 ### `bad_request`
 

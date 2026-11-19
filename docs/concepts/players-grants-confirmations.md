@@ -11,6 +11,10 @@ When a player links an agent they choose a scope. It is stored on the grant.
   one anyway, the answer is `scope_insufficient`.
 - **Operator** allows read and action tools, inside the caps in your manifest.
 
+The studio can also cap every grant with `--max-scope coach`, which makes the whole gateway read
+only. That is how a first pilot starts. The consent page then offers only Coach and an existing
+operator grant is treated as coach until the cap is raised (see the runbook, "Pilot rollout").
+
 The scope is checked before the rate limit and cannot be talked around. Under `--dev-auth` no
 scope applies, which is one more reason the demo mode is for local use only.
 

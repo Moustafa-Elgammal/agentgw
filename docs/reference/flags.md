@@ -21,7 +21,9 @@ The gateway server.
 | `--key-id` | string | `dev-1` | signing key id sent to the backend |
 | `--manifest` | string | none | path to the tool manifest (YAML for .yaml or .yml, JSON for anything else) |
 | `--manifest-poll` | duration | 15s | how often to pick up a manifest version activated elsewhere (0 disables) |
+| `--max-body` | int | 1048576 | largest request body in bytes. OAuth and studio endpoints keep their lower caps, manifest upload its own |
 | `--max-clients` | int | 10000 | most OAuth clients this process will register (negative disables) |
+| `--max-scope` | string | from `AGENTGW_MAX_SCOPE` | the most any player may grant: coach (read only, recommended for a first pilot) or operator. Empty means operator |
 | `--ops-addr` | string | `127.0.0.1:9090` | listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables) |
 | `--postgres-url` | string | from `AGENTGW_POSTGRES_URL` | Postgres URL for player confirmations (default: in-memory, single process) |
 | `--public-url` | string | `http://127.0.0.1:8080` | public base URL of this gateway: the OAuth issuer, and the MCP resource is &lt;public-url&gt;/mcp |
@@ -38,6 +40,7 @@ Environment variables:
 | Variable | Meaning |
 |---|---|
 | `AGENTGW_ADMIN_SECRET` | Secret of the admin key (`--admin-key-id`) that signs manifest and admin activity calls. Without it, and without `--admin-keys-file`, those endpoints are not mounted. Must differ from the signing secret. |
+| `AGENTGW_MAX_SCOPE` | Default of `--max-scope`. |
 | `AGENTGW_POSTGRES_URL` | Default of `--postgres-url`. |
 | `AGENTGW_REDIS_ADDR` | Default of `--redis-addr`. |
 | `AGENTGW_RELAY_SECRET` | Secret that signs relay tickets. Without it the relay is off and relay tools answer `client_offline`. |

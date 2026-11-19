@@ -56,13 +56,16 @@ func (s *Server) parseAuthz(r *http.Request, q url.Values) (*authzRequest, bool,
 	if req.resource != s.cfg.Resource {
 		return req, true, "invalid_target", "resource must be " + s.cfg.Resource
 	}
-	req.allowedScopes = []Scope{ScopeCoach, ScopeOperator}
+	req.allowedScopes = scopesUpTo(s.cfg.MaxScope)
 	if raw := strings.TrimSpace(q.Get("scope")); raw != "" {
 		req.allowedScopes = nil
 		for _, f := range strings.Fields(raw) {
 			sc := Scope(f)
 			if !sc.Valid() {
 				return req, true, "invalid_scope", "scope must be coach and/or operator"
+			}
+			if sc.Cap(s.cfg.MaxScope) != sc {
+				return req, true, "invalid_scope", "this gateway only grants the coach scope"
 			}
 			req.allowedScopes = append(req.allowedScopes, sc)
 		}
