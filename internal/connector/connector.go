@@ -6,12 +6,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/core"
@@ -30,6 +32,40 @@ type HTTP struct {
 	Secret  []byte
 	Client  *http.Client
 	Now     func() time.Time
+
+	key atomic.Pointer[signKey] // set by SetKey; nil means KeyID and Secret
+}
+
+type signKey struct {
+	id     string
+	secret []byte
+}
+
+// SetKey replaces the key that signs backend calls. It is safe to call while calls are in
+// flight: a call reads the key once, so it finishes with the key it started with. The id must be
+// a safe header value and the secret must not be empty; otherwise the current key stays.
+func (c *HTTP) SetKey(id string, secret []byte) error {
+	if id == "" || !headerSafe(id) || len(id) > 128 {
+		return errors.New("connector: signing key id is empty or not a safe header value")
+	}
+	if len(secret) == 0 {
+		return errors.New("connector: signing key secret is empty")
+	}
+	c.key.Store(&signKey{id: id, secret: append([]byte(nil), secret...)})
+	return nil
+}
+
+// CurrentKeyID returns the id of the key signing backend calls right now.
+func (c *HTTP) CurrentKeyID() string {
+	id, _ := c.signing()
+	return id
+}
+
+func (c *HTTP) signing() (string, []byte) {
+	if k := c.key.Load(); k != nil {
+		return k.id, k.secret
+	}
+	return c.KeyID, c.Secret
 }
 
 const maxBody = 1 << 20 // 1 MiB
@@ -106,7 +142,8 @@ func (c *HTTP) Call(ctx context.Context, p core.Principal, t core.Tool, args map
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
-	agentsig.Sign(req, c.KeyID, c.Secret, p.PlayerID, idem, body, c.Now())
+	keyID, secret := c.signing()
+	agentsig.Sign(req, keyID, secret, p.PlayerID, idem, body, c.Now())
 
 	resp, err := c.Client.Do(req)
 	if err != nil {

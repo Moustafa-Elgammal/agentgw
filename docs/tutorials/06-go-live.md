@@ -31,15 +31,26 @@ The compose file already starts Postgres and Redis next to the gateway. The over
 tutorial, `examples/tutorials/compose.golive.yml`, adds the admin key, a key file and the trusted
 header. Every secret in it is a placeholder.
 
-## 1. Start with a key file
+## 1. Start with key files
 
-Keys can live in a JSON file of `{"key id": "secret"}`. The gateway reloads it when it receives
-SIGHUP, so rotation needs no restart. Make a folder and a first key, `studio-a`:
+Keys live in JSON files, and the gateway reloads them when it receives SIGHUP, so rotation needs
+no restart. This tutorial uses two files and two flags:
+
+- `studio-keys.json`, `{"key id": "secret"}`, holds the keys your studio backend signs with
+  (`--studio-keys-file`). With `--studio-keys-only` the key from `--studio-key-id` and
+  `AGENTGW_SIGNING_SECRET` is retired, so these are the only studio keys the gateway accepts.
+- `backend-key.json`, `{"id": "...", "secret": "..."}`, holds the key the gateway signs its calls to
+  your backend with (`--backend-key-file`). The fake city backend reads `backend-keys.json`, the keys
+  it will verify, and re-reads it when it changes.
+
+Make a folder with a first key of each kind, `studio-a` and `backend-a`:
 
 ```bash
 mkdir -p .tutorial-keys
 printf '{"studio-a":"golive-demo-studio-a-secret-0001"}\n' > .tutorial-keys/studio-keys.json
-chmod 600 .tutorial-keys/studio-keys.json
+printf '{"id":"backend-a","secret":"golive-demo-backend-a-secret-0001"}\n' > .tutorial-keys/backend-key.json
+printf '{"backend-a":"golive-demo-backend-a-secret-0001"}\n' > .tutorial-keys/backend-keys.json
+chmod 600 .tutorial-keys/*.json
 
 dc() {
   docker compose -f docker-compose.yml -f examples/tutorials/compose.oauth.yml \
@@ -216,12 +227,12 @@ dc logs gateway 2>&1 | grep 'studio keys loaded' | grep studio-keys.json | tail 
 ```
 
 ```text
-{"time":"...","level":"INFO","msg":"studio keys loaded","file":"/etc/agentgw-keys/studio-keys.json","count":3}
+{"time":"...","level":"INFO","msg":"studio keys loaded","file":"/etc/agentgw-keys/studio-keys.json","count":2,"added":["studio-b"],"removed":null,"primary_retired":true}
 ```
 
-The log shows how many keys are loaded and never their ids or secrets. The count is 3 because the
-key from `--studio-key-id` and `AGENTGW_SIGNING_SECRET` is always valid as well (more on that
-below). Both new and old keys work now:
+The log shows the key ids that were added and removed and never a secret. The count is 2 because
+`--studio-keys-only` keeps the key from `--studio-key-id` out of the set. Both new and old keys work
+now:
 
 ```bash
 studio_b --player alice --expect 200 GET /v1/studio/grants
@@ -258,20 +269,76 @@ dc logs gateway 2>&1 | grep 'key reload failed' | tail -n 1
 {"time":"...","level":"ERROR","msg":"key reload failed, keeping current keys","file":"/etc/agentgw-keys/studio-keys.json","err":"studiosig: key file ..."}
 ```
 
-Two things to know:
-
-- The key named by `--studio-key-id` with `AGENTGW_SIGNING_SECRET` is read at start and always
-  stays valid. That secret also signs the gateway's calls to your backend. To rotate **it**, move
-  your studio to a file key as above and change the environment value on the next restart.
-- The admin key works the same way with `--admin-keys-file` and `AGENTGW_ADMIN_SECRET`. The
-  relay secret (`AGENTGW_RELAY_SECRET`) is read at start only, so rotating it needs a restart.
-
 Put the file back so the rest of the tutorial keeps working:
 
 ```bash
 printf '{"studio-b":"golive-demo-studio-b-secret-0002"}\n' > .tutorial-keys/studio-keys.json
 dc kill -s HUP gateway
 ```
+
+### The key from the environment can be retired too
+
+Without `--studio-keys-only` the key named by `--studio-key-id` with `AGENTGW_SIGNING_SECRET` is
+read at start and stays valid for as long as the process lives. With the flag it is not accepted at
+all, so you can move to file keys once and never restart to rotate again. The tutorial started
+with the flag, so the old environment key is already refused:
+
+```bash
+dc run --rm -T dev bin/studiocall --key-id dev-1 --secret-env AGENTGW_SIGNING_SECRET \
+  --player alice --expect 401 GET /v1/studio/grants
+```
+
+```text
+{"error":"invalid_client"}
+HTTP 401
+```
+
+The admin key works the same way with `--admin-keys-file`, `--admin-keys-only` and
+`AGENTGW_ADMIN_SECRET`. Every reload counts in `agentgw_key_reloads_total{kind,result}`, with `kind`
+one of `studio`, `admin` or `backend` and `result` `ok` or `error`, so you can alert on a rotation
+that did not take. The relay secret (`AGENTGW_RELAY_SECRET`) is read at start only, so rotating it
+needs a restart of every replica.
+
+## 7b. Rotate the key that signs calls to your backend
+
+The gateway signs each call to your backend. The same rule applies, in a different order, because
+the backend is the one that has to learn the new key first: **teach the backend both keys, switch the
+gateway, then drop the old key from the backend.**
+
+```bash
+# 1. the backend now verifies backend-a and backend-b
+printf '{"backend-a":"golive-demo-backend-a-secret-0001","backend-b":"golive-demo-backend-b-secret-0002"}\n' \
+  > .tutorial-keys/backend-keys.json
+
+# 2. switch the gateway to backend-b
+printf '{"id":"backend-b","secret":"golive-demo-backend-b-secret-0002"}\n' > .tutorial-keys/backend-key.json
+dc kill -s HUP gateway
+sleep 1
+dc logs gateway 2>&1 | grep 'backend signing key loaded' | tail -n 1
+```
+
+```text
+{"time":"...","level":"INFO","msg":"backend signing key loaded","file":"/etc/agentgw-keys/backend-key.json","key_id":"backend-b","previous_key_id":"backend-a"}
+```
+
+Calls keep working. A call already in flight finishes with the key it started with, and the next
+call uses the new one, so nothing fails during the switch. Now drop the old key from the backend:
+
+```bash
+printf '{"backend-b":"golive-demo-backend-b-secret-0002"}\n' > .tutorial-keys/backend-keys.json
+```
+
+To see that the gateway really signs with `backend-b`, make the backend know only `backend-a`
+for a moment. The call is refused, and works again when you put `backend-b` back:
+
+```text
+{"code":"backend_rejected","message":"agentsig: signature mismatch","ok":false}
+```
+
+A backend key file that does not parse, or has an empty id or secret, is ignored: the gateway logs
+`backend key reload failed, keeping current key` and keeps signing with the key it has. Your own
+backend needs the same overlap. The example backend re-reads `AGENTGW_SIGNING_KEYS_FILE` when it
+changes. In your own code, look the secret up by the `X-AG-Key-Id` header, as in tutorial 3.
 
 ## 8. The activity feed
 

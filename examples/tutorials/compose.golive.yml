@@ -3,8 +3,8 @@
 #   docker compose -f docker-compose.yml -f examples/tutorials/compose.oauth.yml \
 #     -f examples/tutorials/compose.golive.yml up -d --build gateway
 #
-# Adds the admin key (manifest upload and rollback), a studio key file for rotation, and a
-# trusted client address header. Dev only: every secret here is a placeholder.
+# Adds the admin key (manifest upload and rollback), key files for rotating the studio key and
+# the key that signs backend calls (no restart), and a trusted client address header. Dev only: every secret here is a placeholder.
 services:
   gateway:
     command:
@@ -18,9 +18,18 @@ services:
       - --tenant=city
       - --manifest-poll=2s
       - --studio-keys-file=/etc/agentgw-keys/studio-keys.json
+      - --studio-keys-only   # the key from --studio-key-id is retired: only the file's keys sign studio calls
+      - --backend-key-file=/etc/agentgw-keys/backend-key.json   # the key that signs calls to the backend
       - --client-ip-header=X-Forwarded-For
     environment:
       - AGENTGW_ADMIN_SECRET=golive-demo-admin-secret-0001
+    volumes:
+      - ${TUTORIAL_KEYS_DIR:-./.tutorial-keys}:/etc/agentgw-keys:ro
+  # The fake city backend verifies the gateway's signature with every key in this file, so the
+  # tutorial can add a second key, switch the gateway to it and then drop the first.
+  city-backend:
+    environment:
+      - AGENTGW_SIGNING_KEYS_FILE=/etc/agentgw-keys/backend-keys.json
     volumes:
       - ${TUTORIAL_KEYS_DIR:-./.tutorial-keys}:/etc/agentgw-keys:ro
   # The toolchain container plays the studio backend, so it knows the studio's secrets.

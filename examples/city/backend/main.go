@@ -25,21 +25,21 @@ type city struct {
 
 func main() {
 	secret := os.Getenv("AGENTGW_SIGNING_SECRET")
-	if secret == "" {
-		log.Fatal("set AGENTGW_SIGNING_SECRET")
+	// AGENTGW_SIGNING_KEYS_FILE is a JSON file {"key-id":"secret"} that is re-read when it changes.
+	// It lets the studio rotate the key the gateway signs with: list both keys, switch the gateway,
+	// then remove the old one. See docs/tutorials/06-go-live.md.
+	keysFile := os.Getenv("AGENTGW_SIGNING_KEYS_FILE")
+	if secret == "" && keysFile == "" {
+		log.Fatal("set AGENTGW_SIGNING_SECRET or AGENTGW_SIGNING_KEYS_FILE")
 	}
+	keys := newKeyset("dev-1", secret, keysFile)
 	c := &city{Coins: 500, Res: map[string]int{"food": 60, "water": 60, "materials": 60}}
 	prices := map[string]int{"food": 2, "water": 1, "materials": 4}
 
 	verify := func(h func(w http.ResponseWriter, r *http.Request, body []byte)) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-			_, err := agentsig.Verify(r, body, func(id string) []byte {
-				if id == "dev-1" {
-					return []byte(secret)
-				}
-				return nil
-			}, time.Now(), 0)
+			_, err := agentsig.Verify(r, body, keys.secretFor, time.Now(), 0)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return

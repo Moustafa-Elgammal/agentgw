@@ -29,6 +29,9 @@ dc down -v --remove-orphans >/dev/null 2>&1 || true
 mkdir -p "$TUTORIAL_KEYS_DIR"
 printf '{"studio-a":"golive-demo-studio-a-secret-0001"}\n' > "$TUTORIAL_KEYS_DIR/studio-keys.json"
 chmod 600 "$TUTORIAL_KEYS_DIR/studio-keys.json"
+printf '{"id":"backend-a","secret":"golive-demo-backend-a-secret-0001"}\n' > "$TUTORIAL_KEYS_DIR/backend-key.json"
+printf '{"backend-a":"golive-demo-backend-a-secret-0001"}\n' > "$TUTORIAL_KEYS_DIR/backend-keys.json"
+chmod 600 "$TUTORIAL_KEYS_DIR"/*.json
 dc up -d --build gateway
 for _ in $(seq 1 60); do curl -sf http://127.0.0.1:$OPS/readyz >/dev/null && break; sleep 1; done
 dc build --quiet dev
@@ -117,6 +120,50 @@ echo "put the file back:"
 printf '{"studio-b":"golive-demo-studio-b-secret-0002"}\n' > "$TUTORIAL_KEYS_DIR/studio-keys.json"
 dc kill -s HUP gateway
 sleep 1
+
+step "7b. The key from the environment is retired too (--studio-keys-only)"
+dc run --rm -T dev bin/studiocall --key-id dev-1 --secret-env AGENTGW_SIGNING_SECRET --player alice --expect 401 GET /v1/studio/grants
+dc logs gateway 2>&1 | grep 'studio keys loaded' | tail -n 1 | cut -c1-260
+expect "$(dc logs gateway 2>&1)" '"removed":["studio-a"]'
+expect "$(curl -s http://127.0.0.1:$OPS/metrics)" 'agentgw_key_reloads_total{kind="studio",result="error"}'
+
+step "7c. Rotate the key that signs calls to your backend, with no restart"
+CALL='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_city_state","arguments":{}}}'
+expect "$(mcp "$CALL")" '\"ok\":true'
+echo "the gateway signs with backend-a now:"
+dc logs gateway 2>&1 | grep 'backend signing key loaded' | tail -n 1 | cut -c1-200
+echo "1. teach the backend both keys:"
+printf '{"backend-a":"golive-demo-backend-a-secret-0001","backend-b":"golive-demo-backend-b-secret-0002"}\n' > "$TUTORIAL_KEYS_DIR/backend-keys.json"
+sleep 1
+echo "2. switch the gateway to backend-b:"
+printf '{"id":"backend-b","secret":"golive-demo-backend-b-secret-0002"}\n' > "$TUTORIAL_KEYS_DIR/backend-key.json"
+dc kill -s HUP gateway
+sleep 1
+dc logs gateway 2>&1 | grep 'backend signing key loaded' | tail -n 1 | cut -c1-200
+expect "$(dc logs gateway 2>&1)" '"previous_key_id":"backend-a"'
+expect "$(mcp "$CALL")" '\"ok\":true'
+echo "3. drop backend-a from the backend:"
+printf '{"backend-b":"golive-demo-backend-b-secret-0002"}\n' > "$TUTORIAL_KEYS_DIR/backend-keys.json"
+sleep 1
+expect "$(mcp "$CALL")" '\"ok\":true'
+echo "proof the gateway really signs with backend-b: a backend that only knows backend-a refuses it"
+printf '{"backend-a":"golive-demo-backend-a-secret-0001"}\n' > "$TUTORIAL_KEYS_DIR/backend-keys.json"
+sleep 1
+RES=$(mcp "$CALL"); echo "$RES"
+refuse "$RES" '\"ok\":true'
+printf '{"backend-b":"golive-demo-backend-b-secret-0002"}\n' > "$TUTORIAL_KEYS_DIR/backend-keys.json"
+sleep 1
+expect "$(mcp "$CALL")" '\"ok\":true'
+echo "a bad backend key file keeps the key in use:"
+printf '{"id":"","secret":"x"}\n' > "$TUTORIAL_KEYS_DIR/backend-key.json"
+dc kill -s HUP gateway
+sleep 1
+dc logs gateway 2>&1 | grep 'backend key reload failed' | tail -n 1 | cut -c1-200
+expect "$(mcp "$CALL")" '\"ok\":true'
+printf '{"id":"backend-b","secret":"golive-demo-backend-b-secret-0002"}\n' > "$TUTORIAL_KEYS_DIR/backend-key.json"
+dc kill -s HUP gateway
+sleep 1
+expect "$(curl -s http://127.0.0.1:$OPS/metrics)" 'agentgw_key_reloads_total{kind="backend",result="ok"}'
 
 step "8. The activity feed: what alice's agents did"
 mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_city_state","arguments":{}}}' >/dev/null

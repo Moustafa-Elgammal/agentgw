@@ -274,3 +274,72 @@ func TestLoadKeys(t *testing.T) {
 		t.Error("missing file must error")
 	}
 }
+
+func TestLoadKeyPair(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) string {
+		p := dir + "/pair.json"
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	tests := []struct {
+		name, body string
+		ok         bool
+	}{
+		{"valid", `{"id":"backend-2","secret":"s3cret"}`, true},
+		{"empty id", `{"id":"","secret":"x"}`, false},
+		{"empty secret", `{"id":"a","secret":""}`, false},
+		{"missing fields", `{}`, false},
+		{"unknown field", `{"id":"a","secret":"b","extra":1}`, false},
+		{"not json", `id=a`, false},
+		{"wrong shape", `{"a":"b"}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			kp, err := studiosig.LoadKeyPair(write(tt.body))
+			if (err == nil) != tt.ok {
+				t.Fatalf("err = %v, want ok=%v", err, tt.ok)
+			}
+			if tt.ok && (kp.ID != "backend-2" || string(kp.Secret) != "s3cret") {
+				t.Fatalf("pair = %+v", kp)
+			}
+		})
+	}
+	if _, err := studiosig.LoadKeyPair(dir + "/missing.json"); err == nil {
+		t.Error("missing file must error")
+	}
+}
+
+func TestDiffIDs(t *testing.T) {
+	set := func(ids ...string) map[string]struct{} {
+		m := map[string]struct{}{}
+		for _, id := range ids {
+			m[id] = struct{}{}
+		}
+		return m
+	}
+	tests := []struct {
+		name          string
+		prev, next    map[string]struct{}
+		added, remove string
+	}{
+		{"first load", set(), set("a", "b"), "a,b", ""},
+		{"add one", set("a"), set("a", "b"), "b", ""},
+		{"retire one", set("a", "b"), set("b"), "", "a"},
+		{"swap", set("a"), set("b"), "b", "a"},
+		{"no change", set("a"), set("a"), "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, r := studiosig.DiffIDs(tt.prev, tt.next)
+			if got := strings.Join(a, ","); got != tt.added {
+				t.Errorf("added = %q, want %q", got, tt.added)
+			}
+			if got := strings.Join(r, ","); got != tt.remove {
+				t.Errorf("removed = %q, want %q", got, tt.remove)
+			}
+		})
+	}
+}
