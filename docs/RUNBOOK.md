@@ -470,6 +470,23 @@ exits nonzero if the load tool breaches a threshold, gateway memory or Postgres 
 by more than `MAX_GROWTH_PCT` (default 30) between the first and last quarter, or `/readyz` ever
 fails. Use `DURATION=2m` to check the script itself.
 
+### Soak with the batching audit writer
+
+`AUDIT_QUEUE=1 DURATION=15m scripts/soak.sh` runs the same stack with `--audit-queue=10000`
+(`scripts/soak.audit-queue.yml`). At the end it compares the Postgres audit row count with the
+calls sent and fails if any event was dropped. One run on a laptop, 100 calls per second for
+15 minutes:
+
+- 89,900 calls, 0 errors, p50 2.2 ms, p95 4.6 ms, p99 7.0 ms.
+- 89,901 audit rows (one more than the load tool counted), 0 dropped, queue depth 0 at the end.
+  The writer made 4,368 batch writes of about 20 events, 3.4 ms each on average.
+- Gateway memory 17 to 19 MiB, 2 Postgres connections against a cap of 8, 24 goroutines, `/readyz`
+  200 in all 40 samples.
+
+At this rate the batching writer does not lower latency: the 1 hour synchronous run above had a
+p99 of 6.5 ms. The writer pays off at higher rates and with a slower database, where each call no
+longer waits for an INSERT. A crash can still lose the events that are queued.
+
 Flags: `--rate` (0 means as fast as the workers go), `--concurrency`, `--players` (each player has
 its own limits), `--mix tool=weight,...` (default `get_city_state=8,sell_resource=2`),
 `--args-file` (JSON `{"tool": {args}}` for tools not built in), `--min-rps`, `--timeout`.

@@ -68,6 +68,7 @@ def main():
         "ready_failures": sum(1 for r in rows if r["ready"] != "200"),
         "samples": len(rows),
         "series": series,
+        "audit_queue": (run / "audit.txt").exists(),
         "env": f"{platform.system()} {platform.machine()}, Docker Compose, one gateway, Redis, Postgres and a fake backend on the same machine",
     }
     out.parent.mkdir(parents=True, exist_ok=True)
