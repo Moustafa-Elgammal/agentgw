@@ -203,6 +203,41 @@ current rules the answer is `422` and nothing changes. An unknown id is `404 not
 
 Other replicas pick up the new active version within `--manifest-poll` (default 15s).
 
+## Studio kill switch endpoints
+
+A studio turns a tool, a player or the whole game off during an incident, and back on after. The
+requests are signed like the other studio calls (same five headers, same replay rule) with the
+**admin key**, never the key that signs player calls. `X-AG-Player` names the acting admin and is
+recorded in an audit event. Without an admin key the endpoints are not mounted. Bodies are at most
+4 KiB (`413 {"error":"too_large"}`). A bad signature is `401 {"error":"invalid_client"}`, a store
+failure is `503 {"error":"temporarily_unavailable"}`, and a bad body is
+`400 {"error":"invalid_request","detail":"..."}`.
+
+`GET /v1/studio/switches` lists the switches that are on, ordered by tenant, tool and player:
+
+```json
+{"switches":[{"tenant":"tinycity","tool":"build_structure"}]}
+```
+
+`PUT /v1/studio/switches` turns one on. The body is optional JSON:
+
+```json
+{"tool":"build_structure","player":"alice","reason":"duplicate items under investigation"}
+```
+
+`tool` is a tool name, `player` is 1 to 128 printable ASCII characters without spaces, and `reason`
+is up to 200 characters. All are optional. With no `tool` and no `player` the whole game is
+switched off. The tenant is always the gateway's own. The answer is
+`200 {"switch":{"tenant":"tinycity","tool":"build_structure"},"on":true}`.
+
+`DELETE /v1/studio/switches` turns one off with the same body and answers `"on":false`. Turning a
+switch on or off twice is not an error.
+
+While a switch matches, a call gets `switched_off` and the agent is told not to retry. A switch
+blocks every tier it matches, reads included. Each change writes an audit event with tool
+`admin.switch.on` or `admin.switch.off`, tier `admin`, and the admin as `player`. It shows in the
+admin activity feed. The `reason` goes to the gateway log, not to the event.
+
 ## Relay (client-authoritative games)
 
 Tools marked `"backend": "relay"` in the manifest are not sent to a REST backend. The game

@@ -304,6 +304,48 @@ admin --player ci --expect 200 GET '/v1/studio/admin/activity?limit=3'
 Events are kept for `--audit-retention` (720 hours by default; `0` keeps them forever) and pruned
 hourly.
 
+## 8b. Switch a tool off in an incident
+
+Something is wrong with one tool: it duplicates items, or an exploit is being tried. A kill switch
+stops it now, with no restart and without touching the manifest. It is signed with the admin key
+and works across every replica (the switches live in Redis):
+
+```bash
+admin --player ops-alice --expect 200 \
+  --body '{"tool":"get_city_state","reason":"demo: pretend this tool misbehaves"}' PUT /v1/studio/switches
+```
+
+```text
+HTTP 200
+{"on":true,"switch":{"tenant":"city","tool":"get_city_state"}}
+```
+
+The next call to that tool gets `switched_off`, and the agent is told not to retry. Other tools
+keep working:
+
+```bash
+mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_city_state","arguments":{}}}'
+```
+
+```text
+{"code":"switched_off","message":"get_city_state is switched off by the game right now. Do not retry until the game turns it back on.","ok":false}
+```
+
+A switch can name a `tool`, a `player`, both, or neither, which switches the whole game off. It
+blocks every tier it matches, reads included. `GET /v1/studio/switches` lists what is on. When the
+problem is fixed, turn it off with `DELETE` and the same body:
+
+```bash
+admin --player ops-alice --expect 200 --body '{"tool":"get_city_state"}' DELETE /v1/studio/switches
+```
+
+Every change is an audit event with the acting admin, and it shows in the admin feed. The reason
+goes to the gateway log, not to the audit event:
+
+```bash
+admin --player ci --expect 200 GET '/v1/studio/admin/activity?limit=10&tool=admin.switch.on'
+```
+
 ## 9. Behind a proxy, the limiter must see the real client
 
 Registration of OAuth clients is limited per client address (10 an hour). Behind a load balancer
@@ -378,21 +420,18 @@ gateway_calls_total{tool="sell_resource",outcome="invalid_arguments"} 1
 `policy_unavailable` is your early warning. The repository ships a Grafana dashboard
 (`deploy/grafana/agentgw.json`) and Prometheus alert rules (`deploy/prometheus/alerts.yaml`).
 
-## Kill switches: what exists today
+## Other ways to cut access
 
-Be careful here. The gateway has kill switches (block a tier, a tool or a player in the policy
-store), but the **only HTTP surface for them today is the dev admin API**, which needs
-`--dev-auth` and must never face a network. There is no studio-signed endpoint for switches yet.
+A kill switch is the fastest tool. You also have:
 
-In an incident, use what is signed and works in production:
-
-- **Take a tool away:** upload a manifest without it, or roll back (step 4 and 5). It takes effect
-  on the next call.
+- **Take a tool away for good:** upload a manifest without it, or roll back (step 4 and 5). It takes
+  effect on the next call.
 - **Cut off a player's agents:** `DELETE /v1/studio/grants/{id}` or `DELETE /v1/studio/grants`
   (tutorial 4). It takes effect on the next call.
-- **Stop everything:** scale the gateway to zero, or upload a manifest that holds only read tools.
+- **Stop everything:** switch the whole game off (`PUT /v1/studio/switches` with no body), or scale the
+  gateway to zero.
 
-The [runbook](../RUNBOOK.md#kill-switches-and-revoking-access) says the same.
+The [runbook](../RUNBOOK.md#kill-switches-and-revoking-access) has the same list.
 
 ## Clean up
 
@@ -422,8 +461,9 @@ make helm-check
 - Keys rotate by adding the new one, switching, and removing the old one, with SIGHUP and no
   restart.
 - Run behind a proxy with `--client-ip-header` only when the proxy overwrites that header.
-- Health, readiness and metrics are on the ops port. Kill switches have no production HTTP
-  endpoint yet. Use manifest rollback and grant revocation.
+- Health, readiness and metrics are on the ops port.
+- A kill switch, set with the admin key, stops a tool, a player or the whole game on the next call,
+  and every change is audited.
 
 ## Next
 

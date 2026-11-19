@@ -263,6 +263,103 @@ Auth: `adminSignature`.
 | `422` | The manifest failed validation. Nothing changed. | `Error`, error `invalid_manifest` |
 | `503` | A store failed or the replay cache is full. Nothing changed. Retry with a new idempotency key. | `Error`, error `temporarily_unavailable` |
 
+## Kill switches
+
+Turn a tool, a player or the whole game off and on during an incident. Signed with the admin key.
+
+### `GET /v1/studio/switches`
+
+**List the switches that are on.** Signed with the admin key. Not mounted unless an admin key is configured.
+
+Auth: `adminSignature`.
+
+| Status | Meaning | Body |
+|---|---|---|
+| `200` | The switches that are on, ordered by tenant, tool, player. | object |
+| `401` | The signature is missing, wrong, stale, or the signed request was already used. | `Error`, error `invalid_client` |
+| `503` | A store failed or the replay cache is full. Nothing changed. Retry with a new idempotency key. | `Error`, error `temporarily_unavailable` |
+
+Example response:
+
+```json
+{
+  "switches": [
+    {
+      "tenant": "tinycity",
+      "tool": "build_structure"
+    }
+  ]
+}
+```
+
+### `PUT /v1/studio/switches`
+
+**Turn a switch on.** Blocks every tier the switch matches, reads included, from the next call on. Turning on a switch that is already on is not an error. With no `tool` and no `player` the whole game is switched off. The tenant is always the gateway's own. `X-AG-Player` names the acting admin and is recorded in an audit event (tool `admin.switch.on`). The reason is logged, not stored in the audit event.
+
+Auth: `adminSignature`.
+
+Request body (`application/json`): What to switch. An empty body switches the whole game. At most 4 KiB.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `tool` | string | no | A tool name. Omit for every tool. |
+| `player` | string | no | Printable ASCII, no spaces. Omit for every player. |
+| `reason` | string | no | Free text for the logs. Not stored in the audit event. |
+
+| Status | Meaning | Body |
+|---|---|---|
+| `200` | The switch and its new state. | `SwitchResult` |
+| `400` | A query parameter is malformed. | `Error`, error `invalid_request` |
+| `401` | The signature is missing, wrong, stale, or the signed request was already used. | `Error`, error `invalid_client` |
+| `413` | The body is over the endpoint's limit. | `Error`, error `too_large` |
+| `503` | A store failed or the replay cache is full. Nothing changed. Retry with a new idempotency key. | `Error`, error `temporarily_unavailable` |
+
+Example response:
+
+```json
+{
+  "switch": {
+    "tenant": "tinycity",
+    "tool": "build_structure"
+  },
+  "on": true
+}
+```
+
+### `DELETE /v1/studio/switches`
+
+**Turn a switch off.** Same body as turning one on. Turning off a switch that is not on is not an error. Recorded in an audit event (tool `admin.switch.off`).
+
+Auth: `adminSignature`.
+
+Request body (`application/json`): What to switch back on. An empty body clears the whole-game switch.
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `tool` | string | no | A tool name. Omit for every tool. |
+| `player` | string | no | Printable ASCII, no spaces. Omit for every player. |
+| `reason` | string | no | Free text for the logs. Not stored in the audit event. |
+
+| Status | Meaning | Body |
+|---|---|---|
+| `200` | The switch and its new state. | `SwitchResult` |
+| `400` | A query parameter is malformed. | `Error`, error `invalid_request` |
+| `401` | The signature is missing, wrong, stale, or the signed request was already used. | `Error`, error `invalid_client` |
+| `413` | The body is over the endpoint's limit. | `Error`, error `too_large` |
+| `503` | A store failed or the replay cache is full. Nothing changed. Retry with a new idempotency key. | `Error`, error `temporarily_unavailable` |
+
+Example response:
+
+```json
+{
+  "switch": {
+    "tenant": "tinycity",
+    "tool": "build_structure"
+  },
+  "on": false
+}
+```
+
 ## Activity
 
 What a player's agents did, read from the audit log.
@@ -515,6 +612,29 @@ Request body (`application/x-www-form-urlencoded`):
 | `created_at` | string (date-time) | yes |  |
 | `expires_at` | string (date-time) | yes |  |
 | `args_sha256` | string | yes | Hex SHA-256 of the validated arguments with keys sorted. Not for display: the gateway stores only the hash. |
+
+### Switch
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `tenant` | string | no |  |
+| `tool` | string | no | Empty means every tool. |
+| `player` | string | no | Empty means every player. |
+
+### SwitchRequest
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `tool` | string | no | A tool name. Omit for every tool. |
+| `player` | string | no | Printable ASCII, no spaces. Omit for every player. |
+| `reason` | string | no | Free text for the logs. Not stored in the audit event. |
+
+### SwitchResult
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `switch` | `Switch` | yes |  |
+| `on` | boolean | yes |  |
 
 ### ManifestVersion
 

@@ -167,7 +167,7 @@ func TestHTTPErrorCodesMatchSource(t *testing.T) {
 	}
 	// invalid_client_metadata and friends are OAuth error codes defined by RFC 7591 and 6749.
 	oauth := map[string]bool{"invalid_client_metadata": true, "invalid_redirect_uri": true, "invalid_grant": true, "unsupported_grant_type": true, "invalid_scope": true, "invalid_target": true, "access_denied": true, "server_error": true, "unauthorized_client": true, "unsupported_response_type": true}
-	for _, pkg := range []string{"manifeststore", "activity", "relay", "confirm", "auth"} {
+	for _, pkg := range []string{"manifeststore", "activity", "relay", "confirm", "auth", "switchapi"} {
 		dir := filepath.Join(r, "internal", pkg)
 		entries, _ := os.ReadDir(dir)
 		for _, e := range entries {

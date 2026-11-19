@@ -24,6 +24,8 @@ tags:
     description: The player approves or denies a pending action in the game's own UI. Signed with the studio key.
   - name: Manifest
     description: Upload, read and roll back the tool manifest. Signed with the admin key.
+  - name: Kill switches
+    description: Turn a tool, a player or the whole game off and on during an incident. Signed with the admin key.
   - name: Activity
     description: What a player's agents did, read from the audit log.
   - name: Relay
@@ -217,6 +219,97 @@ paths:
         '401': {$ref: '#/components/responses/InvalidClient'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/WrongState'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/switches:
+    get:
+      tags: [Kill switches]
+      operationId: listSwitches
+      summary: List the switches that are on
+      description: Signed with the admin key. Not mounted unless an admin key is configured.
+      security: [{adminSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '200':
+          description: The switches that are on, ordered by tenant, tool, player.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [switches]
+                properties:
+                  switches: {type: array, items: {$ref: '#/components/schemas/Switch'}}
+              example: {switches: [{tenant: tinycity, tool: build_structure}]}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [Kill switches]
+      operationId: switchOn
+      summary: Turn a switch on
+      description: |
+        Blocks every tier the switch matches, reads included, from the next call on. Turning on
+        a switch that is already on is not an error. With no `tool` and no `player` the whole game
+        is switched off. The tenant is always the gateway's own. `X-AG-Player` names the acting
+        admin and is recorded in an audit event (tool `admin.switch.on`). The reason is logged,
+        not stored in the audit event.
+      security: [{adminSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        description: What to switch. An empty body switches the whole game. At most 4 KiB.
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SwitchRequest'}
+            example: {tool: build_structure, reason: "duplicate items under investigation"}
+      responses:
+        '200':
+          description: The switch and its new state.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SwitchResult'}
+              example: {switch: {tenant: tinycity, tool: build_structure}, on: true}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '413': {$ref: '#/components/responses/TooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [Kill switches]
+      operationId: switchOff
+      summary: Turn a switch off
+      description: |
+        Same body as turning one on. Turning off a switch that is not on is not an error. Recorded
+        in an audit event (tool `admin.switch.off`).
+      security: [{adminSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        description: What to switch back on. An empty body clears the whole-game switch.
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SwitchRequest'}
+            example: {tool: build_structure}
+      responses:
+        '200':
+          description: The switch and its new state.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SwitchResult'}
+              example: {switch: {tenant: tinycity, tool: build_structure}, on: false}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '413': {$ref: '#/components/responses/TooLarge'}
         '503': {$ref: '#/components/responses/Unavailable'}
   /v1/studio/manifest:
     put:
@@ -647,6 +740,25 @@ components:
         created_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
         args_sha256: {type: string, description: 'Hex SHA-256 of the validated arguments with keys sorted. Not for display: the gateway stores only the hash.'}
+    Switch:
+      type: object
+      properties:
+        tenant: {type: string}
+        tool: {type: string, description: "Empty means every tool."}
+        player: {type: string, description: "Empty means every player."}
+    SwitchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        tool: {type: string, pattern: '^[a-z][a-z0-9_]{1,63}$', description: "A tool name. Omit for every tool."}
+        player: {type: string, minLength: 1, maxLength: 128, description: "Printable ASCII, no spaces. Omit for every player."}
+        reason: {type: string, maxLength: 200, description: "Free text for the logs. Not stored in the audit event."}
+    SwitchResult:
+      type: object
+      required: [switch, on]
+      properties:
+        switch: {$ref: '#/components/schemas/Switch'}
+        on: {type: boolean}
     ManifestVersion:
       type: object
       required: [id, sha256, actor, created_at, tools, active]

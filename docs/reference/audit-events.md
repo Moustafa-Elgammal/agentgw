@@ -10,8 +10,8 @@ Every tool call attempt, valid or not, produces one audit event. The gateway log
 | `time` | string (RFC 3339 time) | yes | When the attempt was recorded (UTC). |
 | `tenant` | string | yes | The tenant the call belongs to. Not shown in the player feed. |
 | `player` | string | yes | The player the call was for. The admin feed shows it, the player feed leaves it out. |
-| `tool` | string | yes | The tool name the agent called. `unknown_tool` attempts record the name that was asked for. |
-| `tier` | string | yes | The tool's tier, empty when the tool is unknown. |
+| `tool` | string | yes | The tool name the agent called. `unknown_tool` attempts record the name that was asked for. Kill switch changes made through the admin API record `admin.switch.on` or `admin.switch.off`. |
+| `tier` | string | yes | The tool's tier, empty when the tool is unknown. `admin` for kill switch changes. |
 | `outcome` | string | yes | `ok`, `denied` (a policy or validation refusal) or `error` (infrastructure trouble). |
 | `code` | string | when not ok | The result code of a denial or error, see [Result codes](errors.md). |
 | `args_sha256` | string | yes | Hex SHA-256 of the validated arguments with keys sorted. The arguments themselves are never stored. |

@@ -19,8 +19,10 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifest"
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifeststore"
+	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 	"github.com/Moustafa-Elgammal/agentgw/internal/relay"
 	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
+	"github.com/Moustafa-Elgammal/agentgw/internal/switchapi"
 )
 
 type noopApplier struct{}
@@ -34,6 +36,7 @@ func allRoutes() []string {
 	all = append(all, manifeststore.Routes...)
 	all = append(all, activity.Routes...)
 	all = append(all, relay.Routes...)
+	all = append(all, switchapi.Routes...)
 	sort.Strings(all)
 	return all
 }
@@ -78,6 +81,7 @@ func TestRoutesListsMatchSource(t *testing.T) {
 		{"confirm", confirm.Routes},
 		{"manifeststore", manifeststore.Routes},
 		{"relay", relay.Routes},
+		{"switchapi", switchapi.Routes},
 	}
 	for _, tt := range tests {
 		t.Run(tt.pkg, func(t *testing.T) {
@@ -140,6 +144,7 @@ func TestListedRoutesAreServed(t *testing.T) {
 		{"manifeststore", manifeststore.Routes, []http.Handler{manifeststore.Handler(mgr, v)}},
 		{"activity", activity.Routes, []http.Handler{activity.PlayerHandler(store, "t", v), activity.AdminHandler(store, "t", v)}},
 		{"relay", relay.Routes, []http.Handler{relay.Handler(hub, tickets), relay.MintHandler(tickets, v, "t")}},
+		{"switchapi", switchapi.Routes, []http.Handler{switchapi.Handler(policy.NewMemory(policy.DefaultLimits, nil), v, "t", nil)}},
 	}
 	for _, p := range byPkg {
 		for _, route := range p.routes {

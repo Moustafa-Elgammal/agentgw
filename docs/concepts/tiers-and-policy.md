@@ -63,10 +63,11 @@ everything. A matching call gets `switched_off`, and the message tells the agent
 switch blocks every tier it matches, reads included, so to keep reads working switch off action
 tools by name. Switches are checked first, and are not charged to the rate limit.
 
-Today the endpoint for switches is the dev admin API (`GET` and `POST /v1/admin/switches`, behind
-`X-Dev-Admin: true`, loopback only). A studio-signed switch endpoint is not built yet. In
-production, you can also remove a tool by uploading or rolling back a manifest, and a player
-can revoke an agent. See the [runbook](../RUNBOOK.md).
+The studio sets and clears switches with `PUT` and `DELETE /v1/studio/switches`, signed with the
+admin key, and lists them with `GET`. Changes take effect on the next call on every replica, and
+each one is an audit event. The dev admin API (`/v1/admin/switches`) is for demos. You can also
+remove a tool by uploading or rolling back a manifest, and a player can revoke an agent. See the
+[runbook](../RUNBOOK.md).
 
 ## Fail closed
 

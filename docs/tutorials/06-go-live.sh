@@ -127,6 +127,18 @@ expect "$FEED" '"code":"invalid_arguments"'
 ADMIN_FEED=$(admin --player ci --expect 200 GET '/v1/studio/admin/activity?limit=3'); echo "$ADMIN_FEED"
 expect "$ADMIN_FEED" '"events"'
 
+step "8b. Incident: switch a tool off with the admin key, then switch it back on"
+admin --player ops-alice --expect 200 --body '{"tool":"get_city_state","reason":"demo: pretend this tool misbehaves"}' PUT /v1/studio/switches
+admin --player ops-alice --expect 200 GET /v1/studio/switches
+RES=$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_city_state","arguments":{}}}'); echo "$RES"
+expect "$RES" 'switched_off'
+admin --player ops-alice --expect 200 --body '{"tool":"get_city_state"}' DELETE /v1/studio/switches
+RES=$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_city_state","arguments":{}}}'); echo "$RES"
+expect "$RES" '\"ok\":true'
+CHANGES=$(admin --player ci --expect 200 GET '/v1/studio/admin/activity?limit=10&tool=admin.switch.on'); echo "$CHANGES"
+expect "$CHANGES" '"player":"ops-alice"'
+expect "$CHANGES" '"tool":"admin.switch.on"'
+
 step "9. Behind a proxy the limiter must see the real client"
 CODES=$(for _ in $(seq 1 10); do
   curl -s -o /dev/null -w '%{http_code} ' -H 'X-Forwarded-For: 203.0.113.7' -H 'Content-Type: application/json' \
