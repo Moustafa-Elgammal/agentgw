@@ -386,3 +386,23 @@ down that socket.
 - **Not done:** spell check and Markdown lint, an accessibility audit, versioned docs per release,
   and the terminal recording on the landing page (a text placeholder marks the spot).
 
+## Guides (M9)
+
+- **Tutorial scripts are the CI test.** Every `docs/tutorials/NN-slug.md` has a `NN-slug.sh` with
+  the commands of that guide. `docs/tutorials/run-all.sh` runs them in order against the compose
+  stack, continues after a failure, and exits nonzero if any failed (`--only NN` runs one).
+  `.github/workflows/guides.yml` runs it on pull requests that touch guides, tutorials or
+  examples, and weekly. A guide that stops working fails the build.
+- **Versions are stated.** Each tutorial has a `Verified against` line with the release or commit it
+  ran against. A Go test (`test/docs`) fails if the line, the script, or the guide is missing, so
+  the pair cannot drift apart. A tutorial not written yet is logged, not failed, so guides can land
+  one at a time.
+- **Troubleshooting is complete by test.** `docs/guides/troubleshooting.md` needs one heading per
+  code in `core.Codes`. A new result code fails the test until the page explains it. The generated
+  [result codes](reference/errors.md) page holds the meaning, the guide holds cause, check and fix.
+- **Guides are not generated.** The best practices, cookbook and FAQ are hand written and checked
+  for broken links, dashes and invalid manifest snippets. Facts in them must match the code and the
+  other docs.
+- **One sidebar section.** The site shows `docs/guides/` and `docs/tutorials/` together as
+  "Guides", the learning path first, then the tutorials in numeric order, then the reference guides.
+  The sources stay where they are and read the same on GitHub.

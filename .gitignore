@@ -16,3 +16,5 @@ site/public/og.png
 site/src/content/docs/*
 !site/src/content/docs/index.mdx
 !site/src/content/docs/404.md
+/.tutorial-keys/
+.tutorial-tmp/

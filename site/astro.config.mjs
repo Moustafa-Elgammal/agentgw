@@ -43,6 +43,7 @@ export default defineConfig({
       ],
       sidebar: [
         { label: 'Get started', items: [{ autogenerate: { directory: 'get-started' } }] },
+        { label: 'Guides', items: [{ autogenerate: { directory: 'guides' } }] },
         { label: 'Concepts', items: [{ autogenerate: { directory: 'concepts' } }] },
         { label: 'Reference', items: [{ autogenerate: { directory: 'reference' } }] },
         { label: 'Operate', items: [{ autogenerate: { directory: 'operate' } }] },

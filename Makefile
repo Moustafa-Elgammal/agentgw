@@ -1,4 +1,4 @@
-.PHONY: site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen
+.PHONY: guides-check guides-lint site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen
 
 all: fmt vet test build
 
@@ -93,3 +93,12 @@ site-check:
 
 site-dev:
 	docker compose run --rm --service-ports site dev
+
+# Guides and tutorials. guides-lint checks the Markdown (tutorial pairs, links, manifest blocks,
+# troubleshooting coverage) in the dev container. guides-check runs every tutorial script against
+# the compose stack, so it needs Docker with Compose v2 and bash on the host, nothing else.
+guides-lint:
+	docker compose run --rm dev go test -count=1 ./test/docs/...
+
+guides-check:
+	bash docs/tutorials/run-all.sh

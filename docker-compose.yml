@@ -148,6 +148,46 @@ services:
     ports:
       - "127.0.0.1:4321:4321"
 
+  # Signature verifier examples, one per language. Each checks the shared test vector
+  # (examples/signing/vector.json), a tampered request and a replayed idempotency key:
+  #   docker compose run --rm sig-go | sig-python | sig-typescript | sig-csharp
+  sig-go:
+    image: golang:1.26-bookworm
+    profiles: [tools]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go-mod:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    command: ["go", "test", "-race", "-count=1", "./examples/signing/go/..."]
+
+  sig-python:
+    image: python:3.13-slim
+    profiles: [tools]
+    working_dir: /s/python
+    volumes:
+      - ./examples/signing:/s:ro
+    command: ["python", "-B", "-m", "unittest", "-v"]
+
+  sig-typescript:
+    image: node:22-slim
+    profiles: [tools]
+    working_dir: /s/typescript
+    volumes:
+      - ./examples/signing:/s:ro
+    command: ["node", "--experimental-strip-types", "--no-warnings", "--test"]
+
+  sig-csharp:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    profiles: [tools]
+    environment:
+      - DOTNET_NOLOGO=1
+      - DOTNET_CLI_TELEMETRY_OPTOUT=1
+    volumes:
+      - ./examples/signing:/s:ro
+    # Copied to /tmp so the read-only source tree stays clean.
+    command: ["sh", "-c", "cp -r /s /tmp/s && cd /tmp/s/csharp && dotnet run"]
+
   #   docker compose run --rm actionlint
   actionlint:
     image: rhysd/actionlint:1.7.7

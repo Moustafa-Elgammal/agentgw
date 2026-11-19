@@ -1,0 +1,35 @@
+name: guides
+
+# Runs the commands of every tutorial against the compose stack, so a guide that stops working
+# fails the build. Also on a weekly schedule, to catch drift from outside (base images, Docker).
+on:
+  pull_request:
+    paths:
+      - "docs/tutorials/**"
+      - "docs/guides/**"
+      - "examples/**"
+      - ".github/workflows/guides.yml"
+  schedule:
+    - cron: "17 5 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guides-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tutorials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the guides and run every tutorial script
+        run: |
+          make guides-lint
+          make guides-check
+      - name: Stop the stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans

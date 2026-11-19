@@ -50,12 +50,24 @@ const EXPECTED = new Map([
   ['docs/reference/errors.md', 'Result and error codes'],
   ['docs/reference/audit-events.md', 'Audit event fields'],
   ['docs/reference/studio-api.md', 'Studio and admin API'],
+  ['docs/tutorials/01-play-the-example-game.md', '1. Play the example game with an agent'],
+  ['docs/tutorials/02-describe-your-actions.md', '2. Describe your game\'s actions'],
+  ['docs/tutorials/03-accept-signed-calls.md', '3. Make your backend accept signed calls'],
+  ['docs/tutorials/04-link-a-player.md', '4. Link a player'],
+  ['docs/tutorials/05-ask-before-big-actions.md', '5. Ask the player before big actions'],
+  ['docs/tutorials/06-go-live.md', '6. Go live'],
+  ['docs/tutorials/07-test-your-integration.md', '7. Test your integration'],
 ]);
 
 // Title overrides, by route, where the H1 would be ambiguous in the sidebar.
 const TITLES = new Map([['reference/manifest-guide', 'Manifest guide']]);
 
 const ORDER = [
+  'guides/start-here',
+  'guides/01-play-the-example-game', 'guides/02-describe-your-actions', 'guides/03-accept-signed-calls',
+  'guides/04-link-a-player', 'guides/05-ask-before-big-actions', 'guides/06-go-live',
+  'guides/07-test-your-integration',
+  'guides/best-practices', 'guides/cookbook', 'guides/troubleshooting', 'guides/faq',
   'get-started/overview', 'get-started/quickstart', 'get-started/connect-an-agent', 'get-started/claude-desktop',
   'concepts/pipeline', 'concepts/tiers-and-policy', 'concepts/players-grants-confirmations',
   'concepts/architecture', 'concepts/security-model', 'concepts/features',
@@ -83,6 +95,12 @@ async function* walk(dir) {
 
 function routeFor(rel) {
   if (FILE_ROUTES.has(rel)) return FILE_ROUTES.get(rel);
+  // Guides and tutorials share one sidebar section. The tutorials keep their numbers, so they sort
+  // in order, and docs/guides/index.md is the section's first page (an "index" route would collide
+  // with the section root).
+  if (rel === 'docs/guides/index.md') return 'guides/start-here';
+  const t = /^docs\/tutorials\/(\d{2}-[^/]+)\.md$/.exec(rel);
+  if (t) return `guides/${t[1]}`;
   const m = /^docs\/([^/]+)\/(.+)\.md$/.exec(rel);
   if (m && m[2] !== 'index') return `${m[1]}/${m[2]}`;
   return null;
