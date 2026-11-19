@@ -1,4 +1,4 @@
-.PHONY: guides-check guides-lint site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen site-lint site-spell site-a11y site-dashes docs-quality
+.PHONY: oidc-keycloak-check guides-check guides-lint site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen site-lint site-spell site-a11y site-dashes docs-quality
 
 all: fmt vet test build
 
@@ -99,6 +99,9 @@ site-dev:
 # the compose stack, so it needs Docker with Compose v2 and bash on the host, nothing else.
 guides-lint:
 	docker compose run --rm dev go test -count=1 ./test/docs/...
+
+oidc-keycloak-check:
+	bash scripts/oidc-keycloak-check.sh
 
 guides-check:
 	bash docs/tutorials/run-all.sh

@@ -1,0 +1,46 @@
+# The gateway signs players in through Keycloak. A compatibility check, not a tutorial:
+#
+#   bash scripts/oidc-keycloak-check.sh
+#
+# Same trick as tutorial 8 (examples/tutorials/compose.oidc.yml): the gateway shares the identity
+# provider's network namespace so that 127.0.0.1:15557 is the same address for your browser and for
+# the gateway, because OIDC needs the issuer to match exactly. Dev only; the secrets are placeholders.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      - KC_HTTP_PORT=15557
+      - KC_HOSTNAME=http://127.0.0.1:15557
+      - KC_HOSTNAME_BACKCHANNEL_DYNAMIC=false
+      - KC_HEALTH_ENABLED=true
+    volumes:
+      - ./examples/oidc-keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+    ports:
+      - "127.0.0.1:${KC_GW_PORT:-18109}:8080"   # the gateway
+      - "127.0.0.1:${KC_OPS_PORT:-19109}:9091"  # the gateway's ops port
+      - "127.0.0.1:15557:15557"                 # Keycloak
+
+  gateway:
+    network_mode: "service:keycloak"
+    ports: !reset []
+    restart: on-failure
+    depends_on:
+      keycloak: { condition: service_started }
+    command:
+      - --manifest=/etc/agentgw/manifest.yaml
+      - --backend-url=http://city-backend:9090
+      - --backend-allow-private
+      - --addr=0.0.0.0:8080
+      - --redis-addr=redis:6379
+      - --ops-addr=0.0.0.0:9091
+      - --public-url=http://127.0.0.1:${KC_GW_PORT:-18109}
+      - --tenant=city
+      - --oidc-issuer=http://127.0.0.1:15557/realms/agentgw
+      - --oidc-allow-insecure-http
+      - --oidc-client-id=agentgw
+      - --oidc-player-claim=preferred_username
+      - --oidc-scopes=openid profile
+    environment:
+      - AGENTGW_OIDC_CLIENT_SECRET=dev-oidc-client-secret
+      - AGENTGW_OIDC_SESSION_SECRET=dev-only-session-secret-0123456789abcdef-0123456789
