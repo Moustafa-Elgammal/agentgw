@@ -27,6 +27,8 @@ docker compose down
 
 Guides: `docs/guides/` (index, best practices, cookbook, troubleshooting, FAQ) and `docs/tutorials/NN-slug.md` with a matching `NN-slug.sh` holding the commands CI runs. `make guides-lint` checks the Markdown (tutorial pairs, a `Verified against` line, links, manifest blocks, one troubleshooting heading per result code in `core.Codes`). `make guides-check` runs every tutorial script against the compose stack (`docs/tutorials/run-all.sh`, `--only NN` for one). Change behavior, change the guide.
 
+Docs quality: `make docs-quality` runs every gate in containers: `site-dashes` (no em dashes), `site-lint` (markdownlint-cli2, `.markdownlint-cli2.jsonc`), `site-spell` (codespell, `.codespell-ignore.txt` for project words), `site-check` (build and links) and `site-a11y` (axe WCAG 2 A and AA, horizontal scroll, console errors, light and dark, 1280 and 390 px, screenshots in `site/audit/out/`; Starlight-owned findings go in `site/audit/known-issues.json` with a reason). CI runs it as `.github/workflows/docs-quality.yml`.
+
 Site: `site/` is Astro Starlight and reads `docs/` (`site/scripts/sync-docs.mjs`); never edit `site/src/content/docs/` except `index.mdx` and `404.md`. Manifest examples in docs use a ```` ```json manifest ```` fence and are validated by `go test ./test/docs`. `make site-build site-check site-dev`.
 
 Shortcuts: `make docker-test`, `docker-vet`, `docker-fmt`, `docker-lint`, `docker-vuln`,

@@ -1,0 +1,4 @@
+{
+  "comment": "Findings that belong to Starlight or a third-party widget, not to our components. Each entry needs a reason. An axe violation is ignored only when its rule id matches and the first selector contains selectorContains.",
+  "axe": []
+}

@@ -1,0 +1,5 @@
+# Spell check (make site-spell). Run in a container, see docker-compose.yml.
+[codespell]
+skip = .git,node_modules,dist,.astro,*.svg,*.png,*.json,*.sum,*.lock,package-lock.json,THIRD-PARTY-LICENSES.md,soak-results,bench-results,content/docs
+ignore-words = .codespell-ignore.txt
+quiet-level = 2

@@ -1,7 +1,7 @@
 ---
 // Inline SVG, so it follows the light and dark theme and diffs as text.
 ---
-<div class="gw-diagram">
+<div class="gw-diagram" tabindex="0" role="region" aria-label="How a tool call flows through the gateway, scrolls sideways on a narrow screen">
   <svg viewBox="0 0 960 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="gw-d-title gw-d-desc">
     <title id="gw-d-title">How a tool call flows through the gateway</title>
     <desc id="gw-d-desc">An agent calls a tool over MCP. The gateway checks the call in eight steps: lookup, rate limit, validate, confirm, reserve, signed call, settle, audit. It sends a signed request to the studio backend.</desc>

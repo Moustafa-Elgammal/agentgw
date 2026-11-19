@@ -1,0 +1,33 @@
+// Markdown lint for the project's prose (make site-lint). Generated pages are skipped: they are
+// rewritten by make docs-gen and checked by the drift tests instead.
+{
+  "globs": [
+    "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "AGENTS.md",
+    "docs/**/*.md",
+    "examples/**/README.md"
+  ],
+  "ignores": [
+    "docs/reference/**",
+    "docs/THIRD-PARTY-LICENSES.md",
+    "**/node_modules/**",
+    ".claude/**"
+  ],
+  "config": {
+    "default": true,
+    // Tables, long commands and URLs make a line limit more noise than help.
+    "MD013": false,
+    // Go and C# samples inside fences use tabs.
+    "MD010": { "code_blocks": false },
+    // Inline HTML is used on purpose (details, a few tags).
+    "MD033": false,
+    // The same heading text under different parents is normal (Result, Errors, ...).
+    "MD024": { "siblings_only": true },
+    // Bold lines used as small labels are fine.
+    "MD036": false
+  }
+}

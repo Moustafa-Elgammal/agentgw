@@ -11,11 +11,12 @@ const DESCRIPTION =
 
 // Loads mermaid once per page and draws every diagram, in the theme the reader picked.
 const MERMAID_SCRIPT = `
-import mermaid from 'mermaid';
 // GitHub draws mermaid fences itself, so the docs keep plain fences. Starlight renders them as
-// code blocks, so swap each one for a diagram container before drawing.
-const draw = async () => {
-  for (const code of document.querySelectorAll('pre[data-language="mermaid"]')) {
+// code blocks, so swap each one for a diagram container before drawing. The mermaid library is
+// fetched only on pages that have a diagram.
+const fences = document.querySelectorAll('pre[data-language="mermaid"]');
+if (fences.length) {
+  for (const code of fences) {
     const lines = [...code.querySelectorAll('.ec-line')].map((l) => l.textContent);
     const holder = code.closest('.expressive-code') ?? code;
     const diagram = document.createElement('pre');
@@ -23,13 +24,26 @@ const draw = async () => {
     diagram.textContent = lines.join('\\n');
     holder.replaceWith(diagram);
   }
-  const nodes = document.querySelectorAll('pre.mermaid:not([data-processed])');
-  if (!nodes.length) return;
+  const { default: mermaid } = await import('mermaid');
   const dark = document.documentElement.dataset.theme !== 'light';
   mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'strict' });
-  await mermaid.run({ nodes });
+  await mermaid.run({ nodes: document.querySelectorAll('pre.mermaid:not([data-processed])') });
+}
+`;
+
+// A region that scrolls sideways (a wide table on a phone) must be reachable with the keyboard,
+// or people who cannot use a pointer cannot read the part that is cut off.
+const SCROLLER_SCRIPT = `
+const mark = () => {
+  for (const el of document.querySelectorAll('.sl-markdown-content table, .gw-perf-table table')) {
+    if (el.scrollWidth > el.clientWidth + 1 && !el.hasAttribute('tabindex')) {
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', 'Table, scrolls sideways');
+    }
+  }
 };
-draw();
+mark();
+addEventListener('resize', mark);
 `;
 
 export default defineConfig({
@@ -39,7 +53,12 @@ export default defineConfig({
   integrations: [
     {
       name: 'mermaid-script',
-      hooks: { 'astro:config:setup': ({ injectScript }) => injectScript('page', MERMAID_SCRIPT) },
+      hooks: {
+        'astro:config:setup': ({ injectScript }) => {
+          injectScript('page', MERMAID_SCRIPT);
+          injectScript('page', SCROLLER_SCRIPT);
+        },
+      },
     },
     {
       // GitHub Pages serves /404.html for unknown paths, Astro writes /404/index.html.

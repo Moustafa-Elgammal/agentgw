@@ -1,0 +1,11 @@
+{
+  "name": "agentgw-site-audit",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Accessibility and layout audit of the built site. Runs only in the site-audit container.",
+  "dependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "playwright": "1.49.1"
+  }
+}

@@ -1,4 +1,4 @@
-.PHONY: guides-check guides-lint site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen
+.PHONY: guides-check guides-lint site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen site-lint site-spell site-a11y site-dashes docs-quality
 
 all: fmt vet test build
 
@@ -102,3 +102,24 @@ guides-lint:
 
 guides-check:
 	bash docs/tutorials/run-all.sh
+
+# Documentation quality gates, all in containers (see AGENTS.md). docs-quality runs every one.
+site-lint:
+	docker compose run --rm markdownlint
+
+site-spell:
+	docker compose run --rm codespell
+
+# Build the site, then audit the built pages: axe WCAG 2 A and AA, no horizontal scroll, no
+# console errors, alt text, heading order, in light and dark at 1280 and 390 px.
+site-a11y:
+	docker compose run --rm site build
+	docker compose run --rm site-audit
+
+# The project forbids em dashes in prose. Generated and synced copies are not checked.
+site-dashes:
+	@if grep -rIn --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist --exclude-dir=.astro --exclude-dir=worktrees --exclude-dir=soak-results --exclude-dir=bench-results --exclude-dir=out \
+	  -e '—' -e '―' README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md AGENTS.md docs site/src/components site/src/styles site/scripts site/audit examples scripts; then \
+	  echo "site-dashes: em dashes found above, use commas, colons or full stops"; exit 1; fi
+
+docs-quality: site-dashes site-lint site-spell site-check site-a11y

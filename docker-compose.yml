@@ -148,6 +148,43 @@ services:
     ports:
       - "127.0.0.1:4321:4321"
 
+  # Markdown lint and spell check of the prose (config: .markdownlint-cli2.jsonc, .codespellrc):
+  #   docker compose run --rm markdownlint
+  #   docker compose run --rm codespell
+  markdownlint:
+    image: davidanson/markdownlint-cli2:v0.17.2
+    profiles: [tools]
+    working_dir: /workdir
+    volumes:
+      - .:/workdir
+
+  codespell:
+    image: python:3.13-slim
+    profiles: [tools]
+    working_dir: /repo
+    volumes:
+      - .:/repo
+    entrypoint:
+      - sh
+      - -c
+      - pip install --quiet --no-cache-dir --root-user-action=ignore codespell==2.4.1 && codespell docs README.md CHANGELOG.md CONTRIBUTING.md SECURITY.md AGENTS.md site/src/components site/src/styles site/src/content/docs/index.mdx site/src/content/docs/404.md site/scripts examples/*/README.md
+
+  # Accessibility and layout audit of the built site (axe WCAG 2 A and AA, horizontal scroll,
+  # console errors, alt text, heading order), light and dark, desktop and phone widths.
+  # Build first: make site-a11y does both. Screenshots land in site/audit/out/ (override with
+  # SITE_AUDIT_OUT).
+  site-audit:
+    image: mcr.microsoft.com/playwright:v1.49.1-noble
+    profiles: [tools]
+    working_dir: /repo/site/audit
+    environment:
+      - AUDIT_OUT=/out
+    volumes:
+      - .:/repo
+      - site-audit-node-modules:/repo/site/audit/node_modules
+      - ${SITE_AUDIT_OUT:-./site/audit/out}:/out
+    entrypoint: ["sh", "/repo/site/audit/run.sh"]
+
   # Signature verifier examples, one per language. Each checks the shared test vector
   # (examples/signing/vector.json), a tampered request and a replayed idempotency key:
   #   docker compose run --rm sig-go | sig-python | sig-typescript | sig-csharp
@@ -245,3 +282,4 @@ volumes:
   go-mod:
   go-build:
   site-node-modules:
+  site-audit-node-modules:

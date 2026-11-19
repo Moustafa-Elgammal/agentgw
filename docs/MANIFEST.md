@@ -50,7 +50,7 @@ The same manifest as JSON:
 a test keeps the two identical.
 
 Tips for clean YAML files: one block per tool, small maps such as `http`, `caps` and each param on
-one line, and quote a value that contains `: ` or starts with a special character (a description
+one line, and quote a value that contains a colon followed by a space, or starts with a special character (a description
 like `"Overview: coins and food"`). A typo in a key is reported with its line and column.
 
 ## Fields

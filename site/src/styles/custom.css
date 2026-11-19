@@ -98,3 +98,29 @@
 
 .gw-perf-table { overflow-x: auto; }
 .gw-tiles { grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); }
+
+/* Keyboard access: regions that scroll sideways get a visible focus ring (they are focusable, see
+   the scroller script in astro.config.mjs). */
+.gw-diagram:focus-visible,
+.sl-markdown-content table:focus-visible,
+.gw-perf-table table:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+/* Mermaid draws edge labels on a grey that gives 4.43:1 against its light text in dark mode,
+   just under the 4.5:1 that WCAG AA asks for. A darker label background fixes it. */
+:root[data-theme='dark'] pre.mermaid .labelBkg,
+:root[data-theme='dark'] pre.mermaid .edgeLabel,
+:root[data-theme='dark'] pre.mermaid .edgeLabel p,
+:root[data-theme='dark'] pre.mermaid .edgeLabel rect {
+  background-color: #2a2c33 !important;
+  fill: #2a2c33 !important;
+}
+
+/* The charts are drawn in a 520 unit wide box, so on a phone their text shrinks to about 7px.
+   Larger units keep axis labels and values readable there. */
+@media (max-width: 600px) {
+  .gw-chart .axis { font-size: 15px; }
+  .gw-chart .val { font-size: 16px; }
+}
