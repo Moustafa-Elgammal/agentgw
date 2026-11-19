@@ -1,6 +1,7 @@
 # The gateway signs players in through Keycloak. A compatibility check, not a tutorial:
 #
-#   bash scripts/oidc-keycloak-check.sh
+#   bash scripts/oidc-keycloak-check.sh                   # confidential client (with a secret)
+#   PUBLIC_CLIENT=1 bash scripts/oidc-keycloak-check.sh   # public client (PKCE only)
 #
 # Same trick as tutorial 8 (examples/tutorials/compose.oidc.yml): the gateway shares the identity
 # provider's network namespace so that 127.0.0.1:15557 is the same address for your browser and for
@@ -38,9 +39,10 @@ services:
       - --tenant=city
       - --oidc-issuer=http://127.0.0.1:15557/realms/agentgw
       - --oidc-allow-insecure-http
-      - --oidc-client-id=agentgw
+      - --oidc-client-id=${KC_CLIENT_ID:-agentgw}
+      - --oidc-public-client=${KC_PUBLIC:-false}
       - --oidc-player-claim=preferred_username
       - --oidc-scopes=openid profile
     environment:
-      - AGENTGW_OIDC_CLIENT_SECRET=dev-oidc-client-secret
+      - AGENTGW_OIDC_CLIENT_SECRET=${KC_SECRET-dev-oidc-client-secret}
       - AGENTGW_OIDC_SESSION_SECRET=dev-only-session-secret-0123456789abcdef-0123456789

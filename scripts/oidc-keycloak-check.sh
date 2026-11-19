@@ -10,6 +10,12 @@ expect() { case "$1" in *"$2"*) printf 'ok: found %s\n' "$2" ;; *) fail "expecte
 header() { tr -d '\r' | awk -F': ' -v n="$1" 'tolower($1)==tolower(n){sub(/^[^:]*: /,""); print; exit}'; }
 
 export KC_GW_PORT=18109 KC_OPS_PORT=19109
+if [ -n "${PUBLIC_CLIENT:-}" ]; then
+  export KC_CLIENT_ID=agentgw-public KC_PUBLIC=true KC_SECRET=   # no client secret at all
+  MODE="public client"
+else
+  MODE="confidential client"
+fi
 GW=http://127.0.0.1:$KC_GW_PORT
 KC=http://127.0.0.1:15557/realms/agentgw
 dc() { docker compose --progress quiet -p agentgw-kc -f docker-compose.yml -f examples/oidc-keycloak/compose.yml "$@"; }
@@ -23,6 +29,7 @@ for _ in $(seq 1 180); do curl -sf http://127.0.0.1:$KC_OPS_PORT/readyz >/dev/nu
 curl -s http://127.0.0.1:$KC_OPS_PORT/readyz | grep -q ready || { dc logs --tail 40 gateway keycloak; fail "gateway is not ready"; }
 LOG=$(dc logs gateway 2>&1 | grep 'oidc sign-in enabled' | tail -n 1)
 expect "$LOG" "\"issuer\":\"$KC\""
+if [ -n "${PUBLIC_CLIENT:-}" ]; then expect "$LOG" '"public_client":true'; fi
 
 step "2. An agent registers and starts an authorization request (PKCE)"
 RESOURCE=$(curl -s $GW/.well-known/oauth-protected-resource/mcp | sed 's/.*"resource":"\([^"]*\)".*/\1/')
@@ -73,4 +80,4 @@ dc run --rm -T dev go build -o bin/ ./examples/studiocall
 GRANTS=$(dc run --rm -T dev bin/studiocall --url http://keycloak:8080 --player player --expect 200 GET /v1/studio/grants)
 expect "$GRANTS" '"client_name":"keycloak check"'
 
-printf '\nPASS: keycloak\n'
+printf '\nPASS: keycloak (%s)\n' "$MODE"
