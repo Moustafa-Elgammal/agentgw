@@ -4,7 +4,7 @@
 
 The manifest lists the tools a game exposes to a player's agent. This page is generated from the validator, so it matches the code. The format is described in prose in [Manifest](../MANIFEST.md), and a machine readable [JSON Schema](manifest.schema.json) is generated next to this page.
 
-Check a file with `gwctl validate manifest.json`. The validator reports every problem at once.
+Check a file with `gwctl validate manifest.yaml`. The validator reports every problem at once.
 
 ## Manifest
 
@@ -94,18 +94,72 @@ One tool argument. The key in `params` is the argument name.
 
 ## Example
 
+YAML is the recommended authoring format:
+
+```yaml
+version: 1
+game: city-demo
+tools:
+  - name: get_city_state
+    description: Overview of the city.
+    tier: read
+    http: {method: GET, url: /api/v1/city}
+
+  - name: sell_resource
+    description: Sell a resource at the current price.
+    tier: medium
+    caps: {per_day_amount: 300, amount_param: quantity}
+    http: {method: POST, url: /api/v1/market/sell}
+    params:
+      resource: {type: string, enum: [food, water]}
+      quantity: {type: integer, min: 1, max: 1000}
+```
+
+The same manifest as JSON, which is what the gateway stores and what `PUT /v1/studio/manifest` returns:
+
 ```json
 {
   "version": 1,
   "game": "city-demo",
   "tools": [
-    {"name": "get_city_state", "description": "Overview of the city.", "tier": "read",
-     "http": {"method": "GET", "url": "/api/v1/city"}},
-    {"name": "sell_resource", "description": "Sell a resource at the current price.", "tier": "medium",
-     "caps": {"per_day_amount": 300, "amount_param": "quantity"},
-     "http": {"method": "POST", "url": "/api/v1/market/sell"},
-     "params": {"resource": {"type": "string", "enum": ["food", "water"]},
-                "quantity": {"type": "integer", "min": 1, "max": 1000}}}
+    {
+      "name": "get_city_state",
+      "description": "Overview of the city.",
+      "tier": "read",
+      "caps": {},
+      "http": {
+        "method": "GET",
+        "url": "/api/v1/city"
+      }
+    },
+    {
+      "name": "sell_resource",
+      "description": "Sell a resource at the current price.",
+      "tier": "medium",
+      "caps": {
+        "per_day_amount": 300,
+        "amount_param": "quantity"
+      },
+      "http": {
+        "method": "POST",
+        "url": "/api/v1/market/sell"
+      },
+      "params": {
+        "quantity": {
+          "type": "integer",
+          "min": 1,
+          "max": 1000
+        },
+        "resource": {
+          "type": "string",
+          "enum": [
+            "food",
+            "water"
+          ]
+        }
+      }
+    }
   ]
 }
+
 ```

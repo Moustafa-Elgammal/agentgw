@@ -25,24 +25,30 @@ block() { awk -v info="$1" -v n="$2" '
   on { print }' "$DOC"; }
 
 step "1. Extract the manifests from the tutorial"
-block "json manifest" 1 > "$WORK/pets.json"
-block "json" 1 > "$WORK/broken.json"
-[ -s "$WORK/pets.json" ] && [ -s "$WORK/broken.json" ] || fail "could not extract the manifests"
-diff -u examples/pet-shop/manifest.json "$WORK/pets.json" || fail "examples/pet-shop/manifest.json differs from the tutorial"
-echo "ok: the tutorial manifest equals examples/pet-shop/manifest.json"
+block "yaml manifest" 1 > "$WORK/pets.yaml"
+block "yaml" 1 > "$WORK/broken.yaml"
+block "yaml" 2 > "$WORK/typo.yaml"
+[ -s "$WORK/pets.yaml" ] && [ -s "$WORK/broken.yaml" ] && [ -s "$WORK/typo.yaml" ] || fail "could not extract the manifests"
+# The file in the repository carries a comment header the page leaves out.
+grep -v '^#' examples/pet-shop/manifest.yaml | diff -u - "$WORK/pets.yaml" || fail "examples/pet-shop/manifest.yaml differs from the tutorial"
+echo "ok: the tutorial manifest equals examples/pet-shop/manifest.yaml"
 
 step "2. Validate the good manifest"
-out=$(docker compose run --rm dev go run ./cmd/gwctl validate "$WORK/pets.json" 2>&1 | grep -v Container)
+out=$(docker compose run --rm dev go run ./cmd/gwctl validate "$WORK/pets.yaml" 2>&1 | grep -v Container)
 expect "validates" "$out" "ok: 4 tools"
-out=$(docker compose run --rm dev go run ./cmd/gwctl tools "$WORK/pets.json" 2>&1 | grep -v Container)
+out=$(docker compose run --rm dev go run ./cmd/gwctl tools "$WORK/pets.yaml" 2>&1 | grep -v Container)
 expect "lists feed_pet as safe" "$out" "safe       feed_pet"
 
 step "3. The broken manifest is rejected with every problem at once"
-if out=$(docker compose run --rm dev go run ./cmd/gwctl validate "$WORK/broken.json" 2>&1); then fail "the broken manifest was accepted"; fi
+if out=$(docker compose run --rm dev go run ./cmd/gwctl validate "$WORK/broken.yaml" 2>&1); then fail "the broken manifest was accepted"; fi
 for want in 'name must match' 'description is required' 'unknown tier "admin"' 'http.url must be a path starting with /' \
             'url placeholder {name} has no matching param' 'read tools cannot require confirmation'; do
   expect "reports: $want" "$out" "$want"
 done
+
+if out=$(docker compose run --rm dev go run ./cmd/gwctl validate "$WORK/typo.yaml" 2>&1); then fail "the typo manifest was accepted"; fi
+expect "typo reports the line" "$out" 'unknown field "tyer"'
+expect "typo shows the position" "$out" '[6:5]'
 
 step "4. Run the gateway in front of the Go pet shop"
 "${DC[@]}" up --build -d >/dev/null

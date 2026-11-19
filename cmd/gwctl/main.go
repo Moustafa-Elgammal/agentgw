@@ -50,5 +50,5 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: gwctl version | validate <manifest.json> | tools <manifest.json>")
+	fmt.Fprintln(os.Stderr, "usage: gwctl version | validate <manifest.yaml|manifest.json> | tools <manifest.yaml|manifest.json>")
 }

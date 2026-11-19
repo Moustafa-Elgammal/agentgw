@@ -7,6 +7,11 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## [Unreleased]
 
+### Changed
+
+- Examples, tutorials and docs now write manifests in YAML. JSON is still supported and stored.
+  The Helm chart takes `manifestFile` (default `manifest.yaml`) so the seed manifest can be either.
+
 ## [0.1.0] - unreleased
 
 First public release.

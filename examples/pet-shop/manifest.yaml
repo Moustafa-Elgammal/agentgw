@@ -1,24 +1,36 @@
-{
-  "version": 1,
-  "game": "pawprint-pets",
-  "tools": [
-    {"name": "get_shop", "description": "The shop's coins and the names of the pets you own. Call this first.",
-     "tier": "read", "http": {"method": "GET", "url": "/api/v1/shop"}},
-    {"name": "get_pet", "description": "How one pet is doing. hunger runs from 0 (full) to 100 (starving).",
-     "tier": "read", "http": {"method": "GET", "url": "/api/v1/pets/{name}"},
-     "params": {"name": {"type": "string"}}},
-    {"name": "feed_pet", "description": "Feed a pet. Each unit lowers hunger by 10. kibble costs 1 coin a unit, fish costs 2.",
-     "tier": "safe", "caps": {"per_day_amount": 10, "amount_param": "amount"},
-     "http": {"method": "POST", "url": "/api/v1/pets/feed"},
-     "params": {
-       "pet": {"type": "string"},
-       "food": {"type": "string", "enum": ["kibble", "fish"]},
-       "amount": {"type": "integer", "min": 1, "max": 5}}},
-    {"name": "adopt_pet", "description": "Adopt a new pet for 50 coins. The player must approve each adoption.",
-     "tier": "medium", "confirm": true, "caps": {"per_day_calls": 3, "cooldown_seconds": 30},
-     "http": {"method": "POST", "url": "/api/v1/pets/adopt"},
-     "params": {
-       "name": {"type": "string"},
-       "species": {"type": "string", "enum": ["cat", "dog", "rabbit"]}}}
-  ]
-}
+# The pet shop's tools. The gateway reads this file with --manifest and serves each tool to an
+# agent. Validate it with: gwctl validate examples/pet-shop/manifest.yaml
+version: 1
+game: pawprint-pets
+tools:
+  - name: get_shop
+    description: The shop's coins and the names of the pets you own. Call this first.
+    tier: read
+    http: {method: GET, url: /api/v1/shop}
+
+  - name: get_pet
+    description: How one pet is doing. hunger runs from 0 (full) to 100 (starving).
+    tier: read
+    http: {method: GET, url: "/api/v1/pets/{name}"}
+    params:
+      name: {type: string}
+
+  - name: feed_pet
+    description: Feed a pet. Each unit lowers hunger by 10. kibble costs 1 coin a unit, fish costs 2.
+    tier: safe
+    caps: {per_day_amount: 10, amount_param: amount}
+    http: {method: POST, url: /api/v1/pets/feed}
+    params:
+      pet: {type: string}
+      food: {type: string, enum: [kibble, fish]}
+      amount: {type: integer, min: 1, max: 5}
+
+  - name: adopt_pet
+    description: Adopt a new pet for 50 coins. The player must approve each adoption.
+    tier: medium
+    confirm: true
+    caps: {per_day_calls: 3, cooldown_seconds: 30}
+    http: {method: POST, url: /api/v1/pets/adopt}
+    params:
+      name: {type: string}
+      species: {type: string, enum: [cat, dog, rabbit]}

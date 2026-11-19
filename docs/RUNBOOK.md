@@ -77,12 +77,15 @@ kubectl create secret generic agentgw-credentials \
   --from-literal=postgres-url='postgres://user:pass@host:5432/agentgw?sslmode=require'
 helm install agentgw deploy/helm/agentgw \
   --set existingSecret=agentgw-credentials \
-  --set-file manifest=examples/city/manifest.json \
+  --set-file manifest=examples/city/manifest.yaml \
   --set config.publicURL=https://agentgw.example.com \
   --set config.backendURL=http://game-backend.games.svc:8080 \
   --set config.backendAllowPrivate=true \
   --set config.redisAddr=redis-master.cache.svc:6379
 ```
+
+The seed manifest is written to a ConfigMap as `manifest.yaml`. The gateway reads the format from
+the file name, so for a JSON manifest also pass `--set manifestFile=manifest.json`.
 
 The chart never takes secrets inline. Probes use the ops port (`/healthz` for liveness and
 startup, `/readyz` for readiness). The ops port is on a separate `-ops` Service for scraping and

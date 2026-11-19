@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	manifestPath = "../../examples/city/manifest.json"
+	manifestPath = "../../examples/city/manifest.yaml"
 	keyID        = "k1"
 )
 

@@ -155,7 +155,7 @@ func reloadKeys(log *slog.Logger, v *studiosig.Verifier, id string, secret []byt
 
 func main() {
 	var (
-		manifestPath = flag.String("manifest", "", "path to the tool manifest (.json, or .yaml/.yml)")
+		manifestPath = flag.String("manifest", "", "path to the tool manifest (YAML for .yaml or .yml, JSON for anything else)")
 		backendURL   = flag.String("backend-url", "", "base URL of the game backend")
 		allowPrivate = flag.Bool("backend-allow-private", false, "let the gateway call a backend on a loopback or private address (compose and cluster networks). Off by default: the connector refuses those addresses")
 		keyID        = flag.String("key-id", "dev-1", "signing key id sent to the backend")

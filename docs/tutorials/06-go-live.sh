@@ -59,11 +59,24 @@ ACCESS=$(oauth --ticket "$TICKET" --scope operator | sed 's/.*"access_token":"\(
 TOOLS=$(mcp "$LIST" | tool_names); echo "$TOOLS"
 expect "$TOOLS" sell_resource
 
-step "4. Upload a smaller manifest with the admin key. It is live at once"
-admin --player ci --expect 201 --body-file examples/tutorials/city-lite.json PUT /v1/studio/manifest
+step "4. Upload a smaller manifest as YAML with the admin key. It is live at once"
+admin --player ci --expect 201 --content-type application/yaml --body-file examples/tutorials/city-lite.yaml PUT /v1/studio/manifest
 TOOLS=$(mcp "$LIST" | tool_names); echo "$TOOLS"
 refuse "$TOOLS" sell_resource
 expect "$TOOLS" get_city_state
+expect "$TOOLS" collect_taxes
+
+step "4b. JSON uploads work too"
+printf '{"version":1,"tools":[{"name":"get_city_state","description":"Overview of the city.","tier":"read","http":{"method":"GET","url":"/api/v1/city"}}]}' > "$TUTORIAL_KEYS_DIR/one.json"
+admin --player ci --expect 201 --body-file .tutorial-keys/one.json PUT /v1/studio/manifest
+TOOLS=$(mcp "$LIST" | tool_names); echo "$TOOLS"
+refuse "$TOOLS" collect_taxes
+expect "$TOOLS" get_city_state
+
+step "4c. A YAML upload with a typo is refused with the line"
+printf 'version: 1\ntools:\n  - name: get_city_state\n    description: x\n    tir: read\n' > "$TUTORIAL_KEYS_DIR/typo.yaml"
+OUT=$(admin --player ci --expect 422 --content-type application/yaml --body-file .tutorial-keys/typo.yaml PUT /v1/studio/manifest); echo "$OUT"
+expect "$OUT" 'unknown field'
 
 step "5. List the versions and roll back to the first one"
 VERSIONS=$(admin --player ci --expect 200 GET /v1/studio/manifest/versions); echo "$VERSIONS"

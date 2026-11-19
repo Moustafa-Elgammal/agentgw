@@ -80,7 +80,7 @@ func manifestDoc() (string, error) {
 	b.WriteString(Header)
 	b.WriteString("# Manifest reference\n\n")
 	b.WriteString("The manifest lists the tools a game exposes to a player's agent. This page is generated from the validator, so it matches the code. The format is described in prose in [Manifest](../MANIFEST.md), and a machine readable [JSON Schema](manifest.schema.json) is generated next to this page.\n\n")
-	b.WriteString("Check a file with `gwctl validate manifest.json`. The validator reports every problem at once.\n\n")
+	b.WriteString("Check a file with `gwctl validate manifest.yaml`. The validator reports every problem at once.\n\n")
 	for _, s := range manifestStructs() {
 		fields := jsonFields(s.Type)
 		rows := make([][]string, 0, len(fields))
@@ -126,25 +126,42 @@ func manifestDoc() (string, error) {
 	b.WriteString("- `relay` tools take no `http` binding.\n")
 	fmt.Fprintf(&b, "- A YAML manifest is read up to %d MiB. The studio upload endpoint accepts up to 1 MiB.\n", manifest.MaxYAMLBytes>>20)
 	fmt.Fprintf(&b, "- At call time a string argument is at most %d bytes.\n", gateway.MaxStringArg)
-	b.WriteString("\n## Example\n\n```json\n")
+	m, err := manifest.ParseYAML(strings.NewReader(exampleManifest))
+	if err != nil {
+		return "", fmt.Errorf("docgen example manifest: %w", err)
+	}
+	raw, err := m.Marshal()
+	if err != nil {
+		return "", err
+	}
+	var asJSON bytes.Buffer
+	if err := json.Indent(&asJSON, raw, "", "  "); err != nil {
+		return "", err
+	}
+	b.WriteString("\n## Example\n\nYAML is the recommended authoring format:\n\n```yaml\n")
 	b.WriteString(exampleManifest)
-	b.WriteString("```\n")
+	b.WriteString("```\n\nThe same manifest as JSON, which is what the gateway stores and what `PUT /v1/studio/manifest` returns:\n\n```json\n")
+	b.Write(asJSON.Bytes())
+	b.WriteString("\n```\n")
 	return b.String(), nil
 }
 
-const exampleManifest = `{
-  "version": 1,
-  "game": "city-demo",
-  "tools": [
-    {"name": "get_city_state", "description": "Overview of the city.", "tier": "read",
-     "http": {"method": "GET", "url": "/api/v1/city"}},
-    {"name": "sell_resource", "description": "Sell a resource at the current price.", "tier": "medium",
-     "caps": {"per_day_amount": 300, "amount_param": "quantity"},
-     "http": {"method": "POST", "url": "/api/v1/market/sell"},
-     "params": {"resource": {"type": "string", "enum": ["food", "water"]},
-                "quantity": {"type": "integer", "min": 1, "max": 1000}}}
-  ]
-}
+const exampleManifest = `version: 1
+game: city-demo
+tools:
+  - name: get_city_state
+    description: Overview of the city.
+    tier: read
+    http: {method: GET, url: /api/v1/city}
+
+  - name: sell_resource
+    description: Sell a resource at the current price.
+    tier: medium
+    caps: {per_day_amount: 300, amount_param: quantity}
+    http: {method: POST, url: /api/v1/market/sell}
+    params:
+      resource: {type: string, enum: [food, water]}
+      quantity: {type: integer, min: 1, max: 1000}
 `
 
 // ManifestSchema returns the JSON Schema (2020-12) of the manifest, as indented JSON.

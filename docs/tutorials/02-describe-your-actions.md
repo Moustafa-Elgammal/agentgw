@@ -6,7 +6,8 @@ from this page, validates it, breaks it on purpose, and then runs it through a r
 front of a small backend. CI runs that script.
 
 You will write a manifest for a tiny REST API, validate it with `gwctl`, read the errors it
-reports, and call your tools through a gateway.
+reports, and call your tools through a gateway. The manifest is a YAML file, which is the
+easiest format to read and review. JSON works too (see [the end](#json-works-too)).
 
 ## Prerequisites
 
@@ -44,35 +45,46 @@ unless the studio turns them on. The reasoning behind tiers is in
 
 ## 2. Write the manifest
 
-```json manifest
-{
-  "version": 1,
-  "game": "pawprint-pets",
-  "tools": [
-    {"name": "get_shop", "description": "The shop's coins and the names of the pets you own. Call this first.",
-     "tier": "read", "http": {"method": "GET", "url": "/api/v1/shop"}},
-    {"name": "get_pet", "description": "How one pet is doing. hunger runs from 0 (full) to 100 (starving).",
-     "tier": "read", "http": {"method": "GET", "url": "/api/v1/pets/{name}"},
-     "params": {"name": {"type": "string"}}},
-    {"name": "feed_pet", "description": "Feed a pet. Each unit lowers hunger by 10. kibble costs 1 coin a unit, fish costs 2.",
-     "tier": "safe", "caps": {"per_day_amount": 10, "amount_param": "amount"},
-     "http": {"method": "POST", "url": "/api/v1/pets/feed"},
-     "params": {
-       "pet": {"type": "string"},
-       "food": {"type": "string", "enum": ["kibble", "fish"]},
-       "amount": {"type": "integer", "min": 1, "max": 5}}},
-    {"name": "adopt_pet", "description": "Adopt a new pet for 50 coins. The player must approve each adoption.",
-     "tier": "medium", "confirm": true, "caps": {"per_day_calls": 3, "cooldown_seconds": 30},
-     "http": {"method": "POST", "url": "/api/v1/pets/adopt"},
-     "params": {
-       "name": {"type": "string"},
-       "species": {"type": "string", "enum": ["cat", "dog", "rabbit"]}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: pawprint-pets
+tools:
+  - name: get_shop
+    description: The shop's coins and the names of the pets you own. Call this first.
+    tier: read
+    http: {method: GET, url: /api/v1/shop}
+
+  - name: get_pet
+    description: How one pet is doing. hunger runs from 0 (full) to 100 (starving).
+    tier: read
+    http: {method: GET, url: "/api/v1/pets/{name}"}
+    params:
+      name: {type: string}
+
+  - name: feed_pet
+    description: Feed a pet. Each unit lowers hunger by 10. kibble costs 1 coin a unit, fish costs 2.
+    tier: safe
+    caps: {per_day_amount: 10, amount_param: amount}
+    http: {method: POST, url: /api/v1/pets/feed}
+    params:
+      pet: {type: string}
+      food: {type: string, enum: [kibble, fish]}
+      amount: {type: integer, min: 1, max: 5}
+
+  - name: adopt_pet
+    description: Adopt a new pet for 50 coins. The player must approve each adoption.
+    tier: medium
+    confirm: true
+    caps: {per_day_calls: 3, cooldown_seconds: 30}
+    http: {method: POST, url: /api/v1/pets/adopt}
+    params:
+      name: {type: string}
+      species: {type: string, enum: [cat, dog, rabbit]}
 ```
 
-Save it as `pets.json`. It is also in the repository as `examples/pet-shop/manifest.json`. What
-each part does:
+Save it as `pets.yaml`. It is also in the repository as `examples/pet-shop/manifest.yaml`, with
+a comment at the top. Small maps such as `http` and `caps` are written on one line, and each
+tool is a block, so a diff shows exactly what changed. What each part does:
 
 - **`name` and `description`.** The agent reads them to decide what to call. Write the
   description for the agent: say what the tool does, the units, and the limits. "Each unit
@@ -93,8 +105,8 @@ The complete field list is in the [manifest reference](../reference/manifest.md)
 ## 3. Validate it
 
 ```bash
-docker compose run --rm dev go run ./cmd/gwctl validate pets.json
-docker compose run --rm dev go run ./cmd/gwctl tools pets.json
+docker compose run --rm dev go run ./cmd/gwctl validate pets.yaml
+docker compose run --rm dev go run ./cmd/gwctl tools pets.yaml
 ```
 
 ```text
@@ -110,19 +122,25 @@ medium     adopt_pet
 `gwctl` reports every problem at once, so you fix them in one pass. Here is a manifest with
 mistakes:
 
-```json
-{
-  "version": 1,
-  "game": "pawprint-pets",
-  "tools": [
-    {"name": "Feed Pet", "description": " ", "tier": "admin",
-     "http": {"method": "POST", "url": "api/v1/pets/feed"}},
-    {"name": "get_pet", "description": "How one pet is doing.", "tier": "read",
-     "http": {"method": "GET", "url": "/api/v1/pets/{name}"}},
-    {"name": "adopt_pet", "description": "Adopt a pet.", "tier": "read", "confirm": true,
-     "http": {"method": "POST", "url": "/api/v1/pets/adopt"}}
-  ]
-}
+```yaml
+version: 1
+game: pawprint-pets
+tools:
+  - name: Feed Pet
+    description: " "
+    tier: admin
+    http: {method: POST, url: api/v1/pets/feed}
+
+  - name: get_pet
+    description: How one pet is doing.
+    tier: read
+    http: {method: GET, url: "/api/v1/pets/{name}"}
+
+  - name: adopt_pet
+    description: Adopt a pet.
+    tier: read
+    confirm: true
+    http: {method: POST, url: /api/v1/pets/adopt}
 ```
 
 ```text
@@ -138,7 +156,30 @@ manifest invalid:
 Each line names the tool and the rule. Fix them: a lowercase name, a description, a real tier, a
 leading `/`, a `name` param, and a tier above `read` for a tool that needs approval. The
 validator is strict on purpose: unknown fields and duplicate keys are errors too, so a typo
-never silently does nothing.
+never silently does nothing. For YAML the error also points at the line:
+
+```yaml
+version: 1
+tools:
+  - name: get_shop
+    description: The shop.
+    tier: read
+    tyer: read
+    http: {method: GET, url: /api/v1/shop}
+```
+
+```text
+manifest: decode yaml: [6:5] unknown field "tyer"
+   3 |   - name: get_shop
+   4 |     description: The shop.
+   5 |     tier: read
+>  6 |     tyer: read
+           ^
+   7 |     http: {method: GET, url: /api/v1/shop}
+```
+
+A wrong indent is reported the same way, with the line and column
+(`mapping value is not allowed in this context`).
 
 ## 5. Run it in front of a backend
 
@@ -226,13 +267,28 @@ Clean up with `docker compose -f examples/pet-backend-go/compose.yml down`.
 ## A variant: games that run in the client
 
 If your game logic runs in the game client, not on a server, you have no REST endpoint to map.
-Mark the tool `"backend": "relay"` and drop its `http` block. The gateway then sends the call
+Mark the tool `backend: relay` and drop its `http` block. The gateway then sends the call
 over a WebSocket the game client holds open. The rest of the manifest, caps and confirmation
 included, works the same. See the Relay section of the [protocol](../PROTOCOL.md).
 
+```yaml
+- name: feed_pet
+  description: Feed a pet.
+  tier: safe
+  backend: relay
+  params:
+    pet: {type: string}
+```
+## JSON works too
+
+The gateway reads a manifest as JSON or YAML and picks the format from the file name: `.yaml` or
+`.yml` is YAML, anything else is JSON. Both compile to the same structure, both reject unknown
+fields, and the gateway stores every uploaded version as JSON. Use whichever your tooling
+prefers. Here is `get_shop` in JSON:
+
 ```json
-{"name": "feed_pet", "description": "Feed a pet.", "tier": "safe", "backend": "relay",
- "params": {"pet": {"type": "string"}}}
+{"name": "get_shop", "description": "The shop's coins and the names of the pets you own.",
+ "tier": "read", "http": {"method": "GET", "url": "/api/v1/shop"}}
 ```
 
 ## What you learned

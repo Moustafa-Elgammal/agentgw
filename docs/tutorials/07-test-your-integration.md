@@ -89,7 +89,7 @@ PASS
 ```
 
 (The first run also prints `go: downloading ...` lines.) The test reads the manifest the gateway
-serves from `examples/city/manifest.json`. Use a test player id. The bad-argument calls count
+serves from `examples/city/manifest.yaml`. Use a test player id. The bad-argument calls count
 against that player's rate limit like any other attempt.
 
 ## 3. Check the backend from outside
@@ -146,14 +146,14 @@ the first check must pass.
 
 ## 5. See a failure: the wrong manifest
 
-Tell the gateway check it should expect the two-tool manifest `examples/tutorials/city-lite.json`,
+Tell the gateway check it should expect the two-tool manifest `examples/tutorials/city-lite.yaml`,
 while the gateway serves four tools. The path is relative to `test/conformance`:
 
 ```bash
 dc run --rm -T \
   -e AGENTGW_CONFORMANCE_URL=http://gateway:8080/mcp \
   -e AGENTGW_CONFORMANCE_PLAYER=tutorial-7b \
-  -e AGENTGW_CONFORMANCE_MANIFEST=../../examples/tutorials/city-lite.json \
+  -e AGENTGW_CONFORMANCE_MANIFEST=../../examples/tutorials/city-lite.yaml \
   dev go test -count=1 -run 'TestExternalGateway$' ./test/conformance
 ```
 

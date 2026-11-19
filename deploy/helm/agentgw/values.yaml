@@ -35,8 +35,12 @@ config:
 
 # Seed manifest, used only when the manifest store has no active version. After that the store
 # (uploads through /v1/studio/manifest) is the source of truth. Give the manifest inline, or
-# name an existing ConfigMap that holds the key manifest.json.
+# name an existing ConfigMap that holds the key named by manifestFile.
+# The gateway picks the format from the file name: .yaml or .yml is YAML, anything else is JSON.
+# YAML is the recommended authoring format. For an inline JSON manifest set manifestFile to
+# manifest.json.
 manifest: ""
+manifestFile: manifest.yaml
 existingManifestConfigMap: ""
 
 # One Secret holding the credentials. Keys:

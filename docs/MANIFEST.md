@@ -3,12 +3,30 @@
 A running gateway takes its manifest from the store: `--manifest` only seeds a fresh deployment.
 After that, upload new versions and roll back through `/v1/studio/manifest` (see PROTOCOL.md).
 
-A manifest lists the tools a game exposes. Two formats compile to the same structure: JSON
-(the wire format) and YAML (the authoring format, `.yaml` or `.yml`). Both reject unknown
-fields and duplicate keys. `examples/city/manifest.yaml` is the YAML twin of `manifest.json`,
-and a test keeps them identical.
+A manifest lists the tools a game exposes. Write it in YAML, which is the authoring format
+used in every example and tutorial. The gateway also reads JSON, which is what it stores and what
+the studio API returns. Both formats compile to the same structure and both reject unknown
+fields and duplicate keys. The format is chosen by the file extension: `.yaml` or `.yml` is YAML,
+anything else is JSON. For an upload, send `Content-Type: application/yaml` for YAML and
+`application/json` for JSON.
 
-```json
+```yaml manifest
+version: 1
+game: city-demo
+tools:
+  - name: sell_resource
+    description: Sell food, water or materials at the current sell price.
+    tier: medium
+    caps: {per_day_amount: 300, amount_param: quantity}
+    http: {method: POST, url: /api/v1/market/sell}
+    params:
+      resource: {type: string, enum: [food, water, materials]}
+      quantity: {type: integer, min: 1, max: 1000}
+```
+
+The same manifest as JSON:
+
+```json manifest
 {
   "version": 1,
   "game": "city-demo",
@@ -27,6 +45,13 @@ and a test keeps them identical.
   ]
 }
 ```
+
+`examples/city/manifest.yaml` is the full city example. It has a JSON twin, `manifest.json`, and
+a test keeps the two identical.
+
+Tips for clean YAML files: one block per tool, small maps such as `http`, `caps` and each param on
+one line, and quote a value that contains `: ` or starts with a special character (a description
+like `"Overview: coins and food"`). A typo in a key is reported with its line and column.
 
 ## Fields
 

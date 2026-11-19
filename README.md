@@ -55,7 +55,7 @@ the [CHANGELOG](CHANGELOG.md). Pin a version if you build on it.
 
 ## Features
 
-- Manifest (JSON or YAML) becomes MCP tools. Strict validation reports every problem at once.
+- A manifest, written in YAML (JSON also works), becomes MCP tools. Strict validation reports every problem at once.
 - Policy: rate limits counted before validation, daily caps with reserve and settle, cooldowns,
   tiers, kill switches. Policy outages fail closed.
 - Signed backend calls (HMAC-SHA256, timestamp, idempotency key). Go backends can import

@@ -54,7 +54,7 @@ step "5. A manifest that is not the one the gateway serves fails the tool list c
 if OUT=$(dc run --rm -T \
   -e AGENTGW_CONFORMANCE_URL=http://gateway:8080/mcp \
   -e AGENTGW_CONFORMANCE_PLAYER=tutorial-7b \
-  -e AGENTGW_CONFORMANCE_MANIFEST=../../examples/tutorials/city-lite.json \
+  -e AGENTGW_CONFORMANCE_MANIFEST=../../examples/tutorials/city-lite.yaml \
   dev go test -count=1 -run 'TestExternalGateway$' ./test/conformance 2>&1); then
   fail "the run with the wrong manifest must fail"
 fi

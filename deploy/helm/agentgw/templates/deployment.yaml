@@ -45,7 +45,7 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           args:
-            - --manifest=/etc/agentgw/manifest/manifest.json
+            - --manifest=/etc/agentgw/manifest/{{ .Values.manifestFile }}
             - --addr=0.0.0.0:8080
             - --ops-addr=0.0.0.0:{{ .Values.ops.port }}
             - --public-url={{ .Values.config.publicURL }}

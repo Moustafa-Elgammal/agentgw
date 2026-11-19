@@ -113,10 +113,12 @@ The admin key is different from the studio key. Whoever holds it decides which t
 may call. `X-AG-Player` names who is acting. Here it is `ci`, as if a deploy pipeline did it, and
 it is stored on the version.
 
-`examples/tutorials/city-lite.json` has only two tools. Upload it:
+`examples/tutorials/city-lite.yaml` has only two tools. Upload it as YAML, the same format you
+write your manifests in:
 
 ```bash
-admin --player ci --expect 201 --body-file examples/tutorials/city-lite.json PUT /v1/studio/manifest
+admin --player ci --expect 201 --content-type application/yaml \
+  --body-file examples/tutorials/city-lite.yaml PUT /v1/studio/manifest
 mcp "$LIST" | tool_names
 ```
 
@@ -126,8 +128,24 @@ HTTP 201
 "name":"collect_taxes" "name":"get_city_state"
 ```
 
-No restart, and the same agent token. The next `tools/list` already shows two tools. The body can
-also be YAML with `--content-type application/yaml`.
+No restart, and the same agent token. The next `tools/list` already shows two tools.
+
+JSON works as well. Send it with `Content-Type: application/json`, which is what `studiocall`
+uses when you give it a body and no `--content-type`. The gateway keeps every version as JSON
+whichever format you upload, so a YAML and a JSON upload of the same manifest are the same
+version content. Here is a one-tool JSON upload:
+
+```bash
+printf '{"version":1,"tools":[{"name":"get_city_state","description":"Overview of the city.","tier":"read","http":{"method":"GET","url":"/api/v1/city"}}]}' > .tutorial-keys/one.json
+admin --player ci --expect 201 --body-file .tutorial-keys/one.json PUT /v1/studio/manifest
+mcp "$LIST" | tool_names
+```
+
+```text
+HTTP 201
+{"id":3,"sha256":"307e152c...","actor":"ci","created_at":"2026-11-19T12:46:22.145399041Z","tools":1,"active":true}
+"name":"get_city_state"
+```
 
 (`studiocall` takes its flags before the method and path.)
 
@@ -139,7 +157,7 @@ admin --player ci --expect 200 GET /v1/studio/manifest/versions
 
 ```text
 HTTP 200
-{"versions":[{"id":2,"actor":"ci","tools":2,"active":true,...},{"id":1,"actor":"bootstrap","tools":4,"active":false,...}]}
+{"versions":[{"id":3,"actor":"ci","tools":1,"active":true,...},{"id":2,"actor":"ci","tools":2,"active":false,...},{"id":1,"actor":"bootstrap","tools":4,"active":false,...}]}
 ```
 
 (Shortened.) Version 1 is the file the gateway started from (`actor: bootstrap`). Roll back to it:
@@ -172,7 +190,17 @@ HTTP 422
 ```
 
 The same validator as `gwctl validate` runs on every upload, and it lists every problem at once.
-The active version stays as it was.
+The active version stays as it was. A YAML upload with a typo says where:
+
+```bash
+printf 'version: 1\ntools:\n  - name: get_city_state\n    description: x\n    tir: read\n' > .tutorial-keys/typo.yaml
+admin --player ci --expect 422 --content-type application/yaml --body-file .tutorial-keys/typo.yaml PUT /v1/studio/manifest
+```
+
+```text
+HTTP 422
+{"detail":"manifeststore: invalid manifest: manifest: decode yaml: [5:5] unknown field \"tir\"\n   2 | tools:\n   3 |   - name: get_city_state\n   4 |     description: x\n\u003e  5 |     tir: read\n           ^\n","error":"invalid_manifest"}
+```
 
 ## 7. Rotate the studio key without a restart
 

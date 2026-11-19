@@ -7,23 +7,26 @@ Background is in the [best practices](best-practices.md).
 
 Start here. A coach agent can look but not touch. This is the safest first release.
 
-```json manifest
-{
-  "version": 1,
-  "game": "coach-only",
-  "tools": [
-    {"name": "get_city_state", "tier": "read",
-     "description": "Population, treasury in coins, and stock of each resource in units.",
-     "http": {"method": "GET", "url": "/api/city"}},
-    {"name": "get_prices", "tier": "read",
-     "description": "Current buy and sell price in coins per unit for each resource.",
-     "http": {"method": "GET", "url": "/api/market/prices"}},
-    {"name": "get_building", "tier": "read",
-     "description": "Details of one building by id: type, level, output per hour.",
-     "http": {"method": "GET", "url": "/api/buildings/{building_id}"},
-     "params": {"building_id": {"type": "integer", "min": 1}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: coach-only
+tools:
+  - name: get_city_state
+    description: Population, treasury in coins, and stock of each resource in units.
+    tier: read
+    http: {method: GET, url: /api/city}
+
+  - name: get_prices
+    description: Current buy and sell price in coins per unit for each resource.
+    tier: read
+    http: {method: GET, url: /api/market/prices}
+
+  - name: get_building
+    description: "Details of one building by id: type, level, output per hour."
+    tier: read
+    http: {method: GET, url: "/api/buildings/{building_id}"}
+    params:
+      building_id: {type: integer, min: 1}
 ```
 
 Notes:
@@ -38,26 +41,29 @@ Notes:
 
 Add action tools one at a time. Each tier has its own controls.
 
-```json manifest
-{
-  "version": 1,
-  "game": "operator",
-  "tools": [
-    {"name": "get_city_state", "tier": "read",
-     "description": "Population, treasury in coins, and stock of each resource in units.",
-     "http": {"method": "GET", "url": "/api/city"}},
-    {"name": "collect_taxes", "tier": "safe",
-     "description": "Move pending taxes into the treasury. Usable once a minute.",
-     "caps": {"cooldown_seconds": 60},
-     "http": {"method": "POST", "url": "/api/taxes/collect"}},
-    {"name": "sell_resource", "tier": "medium",
-     "description": "Sell units of one resource at the current price. At most 300 units a day.",
-     "caps": {"per_day_amount": 300, "amount_param": "quantity", "per_day_calls": 20},
-     "http": {"method": "POST", "url": "/api/market/sell"},
-     "params": {"resource": {"type": "string", "enum": ["food", "water", "materials"]},
-                "quantity": {"type": "integer", "min": 1, "max": 1000}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: operator
+tools:
+  - name: get_city_state
+    description: Population, treasury in coins, and stock of each resource in units.
+    tier: read
+    http: {method: GET, url: /api/city}
+
+  - name: collect_taxes
+    description: Move pending taxes into the treasury. Usable once a minute.
+    tier: safe
+    caps: {cooldown_seconds: 60}
+    http: {method: POST, url: /api/taxes/collect}
+
+  - name: sell_resource
+    description: Sell units of one resource at the current price. At most 300 units a day.
+    tier: medium
+    caps: {per_day_amount: 300, amount_param: quantity, per_day_calls: 20}
+    http: {method: POST, url: /api/market/sell}
+    params:
+      resource: {type: string, enum: [food, water, materials]}
+      quantity: {type: integer, min: 1, max: 1000}
 ```
 
 ## Per-tier caps
@@ -72,18 +78,17 @@ Pick the control that matches the risk.
 
 A `medium` tool can combine all three controls:
 
-```json manifest
-{
-  "version": 1,
-  "tools": [
-    {"name": "buy_resource", "tier": "medium",
-     "description": "Buy units of one resource. At most 500 units and 10 purchases a day, and a 30 second pause between purchases.",
-     "caps": {"per_day_amount": 500, "amount_param": "quantity", "per_day_calls": 10, "cooldown_seconds": 30},
-     "http": {"method": "POST", "url": "/api/market/buy"},
-     "params": {"resource": {"type": "string", "enum": ["food", "water", "materials"]},
-                "quantity": {"type": "integer", "min": 1, "max": 200}}}
-  ]
-}
+```yaml manifest
+version: 1
+tools:
+  - name: buy_resource
+    description: Buy units of one resource. At most 500 units and 10 purchases a day, and a 30 second pause between purchases.
+    tier: medium
+    caps: {per_day_amount: 500, amount_param: quantity, per_day_calls: 10, cooldown_seconds: 30}
+    http: {method: POST, url: /api/market/buy}
+    params:
+      resource: {type: string, enum: [food, water, materials]}
+      quantity: {type: integer, min: 1, max: 200}
 ```
 
 Say the limit in the description. The agent then plans around it instead of finding it by
@@ -109,22 +114,24 @@ anything real.
 
 Spending real value should ask the player first. `confirm` makes every call wait for approval.
 
-```json manifest
-{
-  "version": 1,
-  "game": "shop",
-  "tools": [
-    {"name": "list_shop_items", "tier": "read",
-     "description": "Items for sale: id, name and price in gems.",
-     "http": {"method": "GET", "url": "/api/shop/items"}},
-    {"name": "buy_shop_item", "tier": "medium", "confirm": true,
-     "description": "Buy one shop item by id for gems. The player must approve every purchase.",
-     "caps": {"per_day_calls": 5},
-     "http": {"method": "POST", "url": "/api/shop/buy"},
-     "params": {"item_id": {"type": "integer", "min": 1},
-                "quantity": {"type": "integer", "min": 1, "max": 10}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: shop
+tools:
+  - name: list_shop_items
+    description: "Items for sale: id, name and price in gems."
+    tier: read
+    http: {method: GET, url: /api/shop/items}
+
+  - name: buy_shop_item
+    description: Buy one shop item by id for gems. The player must approve every purchase.
+    tier: medium
+    confirm: true
+    caps: {per_day_calls: 5}
+    http: {method: POST, url: /api/shop/buy}
+    params:
+      item_id: {type: integer, min: 1}
+      quantity: {type: integer, min: 1, max: 10}
 ```
 
 What happens:
@@ -170,25 +177,28 @@ The call was cut off after it may have reached your game. It may or may not have
 
 Agents follow a plan better when the tools point at each other. Put the order in the descriptions:
 
-```json manifest
-{
-  "version": 1,
-  "game": "plans",
-  "tools": [
-    {"name": "get_city_state", "tier": "read",
-     "description": "Treasury in coins and stock in units. Step 1 of selling: read the stock first.",
-     "http": {"method": "GET", "url": "/api/city"}},
-    {"name": "get_prices", "tier": "read",
-     "description": "Sell price in coins per unit. Step 2 of selling: compare it with your stock.",
-     "http": {"method": "GET", "url": "/api/market/prices"}},
-    {"name": "sell_resource", "tier": "medium",
-     "description": "Step 3 of selling: sell units you hold. Do not sell more than get_city_state shows.",
-     "caps": {"per_day_amount": 300, "amount_param": "quantity"},
-     "http": {"method": "POST", "url": "/api/market/sell"},
-     "params": {"resource": {"type": "string", "enum": ["food", "water", "materials"]},
-                "quantity": {"type": "integer", "min": 1, "max": 1000}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: plans
+tools:
+  - name: get_city_state
+    description: "Treasury in coins and stock in units. Step 1 of selling: read the stock first."
+    tier: read
+    http: {method: GET, url: /api/city}
+
+  - name: get_prices
+    description: "Sell price in coins per unit. Step 2 of selling: compare it with your stock."
+    tier: read
+    http: {method: GET, url: /api/market/prices}
+
+  - name: sell_resource
+    description: "Step 3 of selling: sell units you hold. Do not sell more than get_city_state shows."
+    tier: medium
+    caps: {per_day_amount: 300, amount_param: quantity}
+    http: {method: POST, url: /api/market/sell}
+    params:
+      resource: {type: string, enum: [food, water, materials]}
+      quantity: {type: integer, min: 1, max: 1000}
 ```
 
 Keep the plan short, and keep the gateway the safety net: even if an agent skips a step, the

@@ -1,6 +1,8 @@
 replicaCount: 3
 existingSecret: agentgw-credentials
 keyFilesSecret: agentgw-keys
+# Inline JSON on purpose: this file covers the all-options render, and manifestFile selects JSON.
+manifestFile: manifest.json
 manifest: |
   {"version":1,"tools":[{"name":"get_state","description":"State.","tier":"read","http":{"method":"GET","url":"/state"}}]}
 config:

@@ -11,7 +11,7 @@ package conformance
 //	AGENTGW_CONFORMANCE_URL        MCP endpoint, for example http://gateway:8080/mcp (required)
 //	AGENTGW_CONFORMANCE_PLAYER     player id sent as X-Dev-Player (gateway started with --dev-auth)
 //	AGENTGW_CONFORMANCE_TOKEN      bearer token instead (OAuth mode). One of the two is required
-//	AGENTGW_CONFORMANCE_MANIFEST   manifest the gateway serves (default ../../examples/city/manifest.json)
+//	AGENTGW_CONFORMANCE_MANIFEST   manifest the gateway serves (default ../../examples/city/manifest.yaml)
 //	AGENTGW_CONFORMANCE_SCOPE      coach to expect read tools only (default operator)
 //
 // Backend checks:

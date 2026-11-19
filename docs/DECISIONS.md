@@ -406,3 +406,19 @@ down that socket.
 - **One sidebar section.** The site shows `docs/guides/` and `docs/tutorials/` together as
   "Guides", the learning path first, then the tutorials in numeric order, then the reference guides.
   The sources stay where they are and read the same on GitHub.
+
+## YAML is the default authoring format
+
+Studio developers write and review manifests by hand, so the examples, tutorials and docs use
+YAML: one block per tool, small maps on one line, comments allowed, and a typo reports its line
+and column. JSON stays fully supported and is still what the gateway stores and what the studio
+API returns. Nothing about the loader or the wire format changed.
+
+- The format follows the file extension (`.yaml` or `.yml` is YAML, anything else JSON) for
+  `--manifest`, `gwctl` and the Helm chart (`manifestFile`, default `manifest.yaml`). An upload
+  uses `Content-Type: application/yaml` or `application/json`.
+- `examples/city/manifest.json` stays next to `manifest.yaml` for tools and tests that read JSON.
+  A test requires every JSON and YAML pair under `examples/` to describe the same manifest.
+- Manifest blocks in the docs are fenced as `yaml manifest` and checked by `test/docs`. A JSON
+  block is allowed only where the page is about the JSON form, and a test lists those pages.
+

@@ -130,14 +130,17 @@ import HowItWorks from '../../components/HowItWorks.astro';
 <Tabs>
   <TabItem label="Manifest">
 
-```json manifest
-{"version": 1, "tools": [
-  {"name": "sell_resource", "description": "Sell food, water or materials at the current sell price.",
-   "tier": "medium", "caps": {"per_day_amount": 300, "amount_param": "quantity"},
-   "http": {"method": "POST", "url": "/api/v1/market/sell"},
-   "params": {"resource": {"type": "string", "enum": ["food", "water", "materials"]},
-              "quantity": {"type": "integer", "min": 1, "max": 1000}}}
-]}
+```yaml manifest
+version: 1
+tools:
+  - name: sell_resource
+    description: Sell food, water or materials at the current sell price.
+    tier: medium
+    caps: {per_day_amount: 300, amount_param: quantity}
+    http: {method: POST, url: /api/v1/market/sell}
+    params:
+      resource: {type: string, enum: [food, water, materials]}
+      quantity: {type: integer, min: 1, max: 1000}
 ```
 
   </TabItem>

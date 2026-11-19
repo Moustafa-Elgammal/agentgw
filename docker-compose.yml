@@ -66,7 +66,7 @@ services:
   gateway:
     build: { context: ., target: gateway }
     command:
-      - --manifest=/etc/agentgw/manifest.json
+      - --manifest=/etc/agentgw/manifest.yaml
       - --backend-url=http://city-backend:9090
       - --backend-allow-private   # the backend is on the compose network; dev only
       - --addr=0.0.0.0:8080

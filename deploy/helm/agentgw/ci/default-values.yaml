@@ -1,3 +1,8 @@
 existingSecret: agentgw-credentials
 manifest: |
-  {"version":1,"tools":[{"name":"get_state","description":"State.","tier":"read","http":{"method":"GET","url":"/state"}}]}
+  version: 1
+  tools:
+    - name: get_state
+      description: State.
+      tier: read
+      http: {method: GET, url: /state}

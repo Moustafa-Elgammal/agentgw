@@ -1,11 +1,14 @@
-{
-  "version": 1,
-  "game": "city-demo",
-  "tools": [
-    {"name": "get_city_state", "description": "Overview of the city: coins, resources, population. Call this first.",
-     "tier": "read", "http": {"method": "GET", "url": "/api/v1/city"}},
-    {"name": "collect_taxes", "description": "Move pending taxes into the treasury. Cooldown applies.",
-     "tier": "safe", "caps": {"cooldown_seconds": 60},
-     "http": {"method": "POST", "url": "/api/v1/taxes/collect"}}
-  ]
-}
+# A two-tool cut of the city manifest, used by the go-live and testing tutorials.
+version: 1
+game: city-demo
+tools:
+  - name: get_city_state
+    description: "Overview of the city: coins, resources, population. Call this first."
+    tier: read
+    http: {method: GET, url: /api/v1/city}
+
+  - name: collect_taxes
+    description: Move pending taxes into the treasury. Cooldown applies.
+    tier: safe
+    caps: {cooldown_seconds: 60}
+    http: {method: POST, url: /api/v1/taxes/collect}

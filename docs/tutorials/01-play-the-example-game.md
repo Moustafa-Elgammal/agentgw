@@ -40,8 +40,8 @@ You should see `"coins":500` first and `"earned":100` after the sale.
 
 ## 2. Run into a daily cap
 
-In `examples/city/manifest.json`, `sell_resource` has `"caps": {"per_day_amount": 300,
-"amount_param": "quantity"}`. The cap counts the amount sold, not the number of calls. You have
+In `examples/city/manifest.yaml`, `sell_resource` has `caps: {per_day_amount: 300,
+amount_param: quantity}`. The cap counts the amount sold, not the number of calls. You have
 sold 50. Ask for 400 more:
 
 ```bash

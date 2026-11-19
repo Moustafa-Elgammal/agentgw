@@ -3,7 +3,7 @@
 //
 //	studiocall --player alice POST /v1/studio/link-tickets
 //	studiocall --key-id admin-1 --secret-env AGENTGW_ADMIN_SECRET --player ci \
-//	    --body-file manifest.json PUT /v1/studio/manifest
+//	    --body-file manifest.yaml PUT /v1/studio/manifest
 //
 // The body goes to stdout and the status line (HTTP 201) to stderr. With --expect N the
 // command exits 1 when the status is not N, so scripts can assert on it. Every call uses a

@@ -16,22 +16,23 @@ charge, so a coarse tool also leaves more budget for the agent's reasoning.
 **Write descriptions for the agent, with units and limits.** The agent only sees the name, the
 description and the parameters. Say what the tool does, what it costs, and what the numbers mean.
 
-```json manifest
-{
-  "version": 1,
-  "game": "design-demo",
-  "tools": [
-    {"name": "get_city_state", "tier": "read",
-     "description": "Population, treasury in coins, and stock of each resource in units. Call this before selling.",
-     "http": {"method": "GET", "url": "/api/city"}},
-    {"name": "sell_resource", "tier": "medium",
-     "description": "Sell units of one resource at the current price. Quantity is in units, 1 to 1000. Pays coins into the treasury.",
-     "caps": {"per_day_amount": 300, "amount_param": "quantity"},
-     "http": {"method": "POST", "url": "/api/market/sell"},
-     "params": {"resource": {"type": "string", "enum": ["food", "water", "materials"]},
-                "quantity": {"type": "integer", "min": 1, "max": 1000}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: design-demo
+tools:
+  - name: get_city_state
+    description: Population, treasury in coins, and stock of each resource in units. Call this before selling.
+    tier: read
+    http: {method: GET, url: /api/city}
+
+  - name: sell_resource
+    description: Sell units of one resource at the current price. Quantity is in units, 1 to 1000. Pays coins into the treasury.
+    tier: medium
+    caps: {per_day_amount: 300, amount_param: quantity}
+    http: {method: POST, url: /api/market/sell}
+    params:
+      resource: {type: string, enum: [food, water, materials]}
+      quantity: {type: integer, min: 1, max: 1000}
 ```
 
 **Use `enum`, `min` and `max` on every parameter you can.** The gateway rejects bad values with

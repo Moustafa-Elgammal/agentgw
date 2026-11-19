@@ -65,7 +65,7 @@ func (m mix) pick(i int) string {
 	return m.names[len(m.names)-1]
 }
 
-// defaultArgs fit examples/city/manifest.json.
+// defaultArgs fit examples/city/manifest.yaml.
 var defaultArgs = map[string]string{
 	"get_city_state":  `{}`,
 	"collect_taxes":   `{}`,

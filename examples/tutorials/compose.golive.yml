@@ -8,7 +8,7 @@
 services:
   gateway:
     command:
-      - --manifest=/etc/agentgw/manifest.json
+      - --manifest=/etc/agentgw/manifest.yaml
       - --backend-url=http://city-backend:9090
       - --backend-allow-private
       - --addr=0.0.0.0:8080

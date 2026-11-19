@@ -249,15 +249,20 @@ func TestSchemaAcceptsExampleManifests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fromYAML any
-	if err := yaml.Unmarshal(yamlDoc, &fromYAML); err != nil {
-		t.Fatal(err)
+	toJSON := func(y []byte) []byte {
+		t.Helper()
+		var v any
+		if err := yaml.Unmarshal(y, &v); err != nil {
+			t.Fatal(err)
+		}
+		j, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return j
 	}
-	asJSON, err := json.Marshal(fromYAML)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, doc := range map[string][]byte{"manifest.json": jsonDoc, "manifest.yaml": asJSON, "reference example": []byte(exampleManifest)} {
+	asJSON := toJSON(yamlDoc)
+	for name, doc := range map[string][]byte{"manifest.json": jsonDoc, "manifest.yaml": asJSON, "reference example": toJSON([]byte(exampleManifest))} {
 		var v any
 		if err := json.Unmarshal(doc, &v); err != nil {
 			t.Fatal(name, err)

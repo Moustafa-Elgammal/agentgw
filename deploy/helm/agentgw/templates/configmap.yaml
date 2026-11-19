@@ -6,6 +6,6 @@ metadata:
   labels:
     {{- include "agentgw.labels" . | nindent 4 }}
 data:
-  manifest.json: |
+  {{ .Values.manifestFile }}: |
 {{ required "set manifest (inline) or existingManifestConfigMap" .Values.manifest | indent 4 }}
 {{- end }}

@@ -17,7 +17,7 @@ docker compose run --rm dev make all       # fmt vet test build (binaries land i
 docker compose run --rm dev make lint      # golangci-lint
 docker compose run --rm dev make vuln      # govulncheck
 docker compose run --rm dev bash           # shell in the toolchain container
-docker compose run --rm dev go run ./cmd/gwctl validate examples/city/manifest.json
+docker compose run --rm dev go run ./cmd/gwctl validate examples/city/manifest.yaml
 
 docker compose run --rm site check          # project site (site/): build, warnings are errors, link check
 docker compose run --rm site dev            # preview at http://127.0.0.1:4321/agentgw/

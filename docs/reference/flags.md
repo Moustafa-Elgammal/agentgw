@@ -19,7 +19,7 @@ The gateway server.
 | `--client-ip-header` | string | none | trusted header carrying the client address, for example X-Forwarded-For. Set it ONLY behind a proxy that overwrites it, or clients can evade rate limits |
 | `--dev-auth` | bool | false | DEV ONLY: trust the X-Dev-Player header and serve the dev HTTP API instead of requiring OAuth tokens |
 | `--key-id` | string | `dev-1` | signing key id sent to the backend |
-| `--manifest` | string | none | path to the tool manifest (.json, or .yaml/.yml) |
+| `--manifest` | string | none | path to the tool manifest (YAML for .yaml or .yml, JSON for anything else) |
 | `--manifest-poll` | duration | 15s | how often to pick up a manifest version activated elsewhere (0 disables) |
 | `--max-clients` | int | 10000 | most OAuth clients this process will register (negative disables) |
 | `--ops-addr` | string | `127.0.0.1:9090` | listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables) |

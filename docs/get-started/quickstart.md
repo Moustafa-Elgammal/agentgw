@@ -34,7 +34,7 @@ curl -s -H 'X-Dev-Player: p1' http://127.0.0.1:8080/v1/tools
  {"name":"sell_resource","description":"Sell food, water or materials at the current sell price.","tier":"medium","params":{"quantity":"integer","resource":"string"}}]}
 ```
 
-These four tools come from `examples/city/manifest.json`. (The output above is wrapped for
+These four tools come from `examples/city/manifest.yaml`. (The output above is wrapped for
 reading.)
 
 ## 3. Call a tool
@@ -169,25 +169,28 @@ The log holds a hash of the arguments, never the arguments. The player and admin
 
 Write a manifest for your game. This one has two tools:
 
-```json manifest
-{
-  "version": 1,
-  "game": "my-game",
-  "tools": [
-    {"name": "get_player", "description": "The player's profile and balance.",
-     "tier": "read", "http": {"method": "GET", "url": "/api/player"}},
-    {"name": "claim_daily_reward", "description": "Claim today's login reward. Once per day.",
-     "tier": "safe", "caps": {"per_day_calls": 1},
-     "http": {"method": "POST", "url": "/api/rewards/daily"}}
-  ]
-}
+```yaml manifest
+version: 1
+game: my-game
+tools:
+  - name: get_player
+    description: The player's profile and balance.
+    tier: read
+    http: {method: GET, url: /api/player}
+
+  - name: claim_daily_reward
+    description: Claim today's login reward. Once per day.
+    tier: safe
+    caps: {per_day_calls: 1}
+    http: {method: POST, url: /api/rewards/daily}
 ```
 
-Save it as `my.json` and check it. The command runs in a container:
+Save it as `my.yaml` and check it. (A `.json` file works too: the gateway reads the format from the
+file extension.) The command runs in a container:
 
 ```bash
-docker compose run --rm dev go run ./cmd/gwctl validate my.json
-docker compose run --rm dev go run ./cmd/gwctl tools my.json
+docker compose run --rm dev go run ./cmd/gwctl validate my.yaml
+docker compose run --rm dev go run ./cmd/gwctl tools my.yaml
 ```
 
 ```text
@@ -204,7 +207,7 @@ manifest invalid:
   - tools[0] ("x"): http.url must be a path starting with /
 ```
 
-To run the gateway on your manifest, change `--manifest` and `--backend-url` in the `gateway`
+To run the gateway on your manifest, change `--manifest` (a `.yaml`, `.yml` or `.json` file) and `--backend-url` in the `gateway`
 service of `docker-compose.yml` and mount your file. The full format is in the
 [manifest reference](../MANIFEST.md).
 

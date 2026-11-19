@@ -1,4 +1,5 @@
-# Same tools as manifest.json, in the YAML authoring format.
+# The city demo manifest in the YAML authoring format. manifest.json is the equivalent JSON
+# document, kept for tools and tests that read JSON. A test keeps the two identical.
 version: 1
 game: city-demo
 tools:

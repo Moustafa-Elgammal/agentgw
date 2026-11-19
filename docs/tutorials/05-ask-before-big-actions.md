@@ -19,25 +19,25 @@ get held, approve one, deny another, and see what the agent sees each time.
 ## 1. Mark a tool, in the manifest
 
 The example manifest already has one. This is `build_structure` from
-`examples/city/manifest.json`:
+`examples/city/manifest.yaml`:
 
-```json manifest
-{
-  "version": 1,
-  "game": "city-demo",
-  "tools": [
-    {"name": "build_structure", "description": "Build a structure on a free tile of the 5x5 grid.",
-     "tier": "medium", "confirm": true, "caps": {"per_day_calls": 20},
-     "http": {"method": "POST", "url": "/api/v1/build"},
-     "params": {
-       "kind": {"type": "string", "enum": ["house", "farm", "well", "power_plant", "sawmill"]},
-       "x": {"type": "integer", "min": 0, "max": 4},
-       "y": {"type": "integer", "min": 0, "max": 4}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: city-demo
+tools:
+  - name: build_structure
+    description: Build a structure on a free tile of the 5x5 grid.
+    tier: medium
+    confirm: true
+    caps: {per_day_calls: 20}
+    http: {method: POST, url: /api/v1/build}
+    params:
+      kind: {type: string, enum: [house, farm, well, power_plant, sawmill]}
+      x: {type: integer, min: 0, max: 4}
+      y: {type: integer, min: 0, max: 4}
 ```
 
-`"confirm": true` is the whole change. A read tool cannot require confirmation (the validator
+`confirm: true` is the whole change. A read tool cannot require confirmation (the validator
 refuses it), because reading changes nothing.
 
 ## 2. Start the stack and link an agent

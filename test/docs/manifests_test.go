@@ -109,6 +109,38 @@ func TestManifestBlocksValidate(t *testing.T) {
 	}
 }
 
+// jsonManifestPages are the only pages that may show a manifest as JSON. YAML is the authoring
+// format, so every other page writes `yaml manifest`. MANIFEST.md shows the JSON twin on purpose.
+var jsonManifestPages = map[string]bool{"docs/MANIFEST.md": true}
+
+func TestManifestBlocksAreYAMLFirst(t *testing.T) {
+	root := filepath.Join("..", "..")
+	var files []string
+	_ = filepath.WalkDir(filepath.Join(root, "docs"), func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && filepath.Ext(p) == ".md" {
+			files = append(files, p)
+		}
+		return nil
+	})
+	files = append(files, filepath.Join(root, "site", "src", "content", "docs", "index.mdx"), filepath.Join(root, "README.md"))
+	yamlBlocks := 0
+	for _, f := range files {
+		page := filepath.ToSlash(strings.TrimPrefix(f, root+string(filepath.Separator)))
+		for _, b := range blocks(t, f) {
+			if b.lang != "json" {
+				yamlBlocks++
+				continue
+			}
+			if !jsonManifestPages[page] {
+				t.Errorf("%s:%d: a JSON manifest block; write it as `yaml manifest` (YAML is the default format)", page, b.line)
+			}
+		}
+	}
+	if yamlBlocks == 0 {
+		t.Fatal("no YAML manifest blocks found, so the scanner is broken or the docs lost their examples")
+	}
+}
+
 // TestScanner pins the fence rules, so a change to blocks() cannot quietly stop checking.
 func TestScanner(t *testing.T) {
 	src := "# t\n\n```json manifest\n{\"a\":1}\n```\n\n  ````yaml manifest\n  version: 1\n  ```\n  nested\n  ````\n\n```json\nnot a manifest\n```\n"

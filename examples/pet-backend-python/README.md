@@ -2,7 +2,7 @@
 
 A toy REST API for the fictional Pawprint Pets game. It accepts the gateway's signed calls
 (see [tutorial 3](../../docs/tutorials/03-accept-signed-calls.md)) and honors idempotency keys.
-The manifest that describes it is [`../pet-shop/manifest.json`](../pet-shop/manifest.json), built up
+The manifest that describes it is [`../pet-shop/manifest.yaml`](../pet-shop/manifest.yaml), built up
 in [tutorial 2](../../docs/tutorials/02-describe-your-actions.md).
 
 ```bash

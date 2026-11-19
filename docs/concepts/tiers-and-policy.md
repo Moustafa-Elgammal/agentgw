@@ -24,21 +24,24 @@ and are not a flag. Over the budget gives `rate_limited`.
 
 **Daily caps.** Set per tool in the manifest.
 
-```json manifest
-{
-  "version": 1,
-  "game": "caps-demo",
-  "tools": [
-    {"name": "collect_taxes", "description": "Move pending taxes into the treasury.",
-     "tier": "safe", "caps": {"cooldown_seconds": 60},
-     "http": {"method": "POST", "url": "/api/taxes/collect"}},
-    {"name": "sell_resource", "description": "Sell a resource at the current price.",
-     "tier": "medium", "caps": {"per_day_calls": 20, "per_day_amount": 300, "amount_param": "quantity"},
-     "http": {"method": "POST", "url": "/api/market/sell"},
-     "params": {"resource": {"type": "string", "enum": ["food", "water"]},
-                "quantity": {"type": "integer", "min": 1, "max": 1000}}}
-  ]
-}
+```yaml manifest
+version: 1
+game: caps-demo
+tools:
+  - name: collect_taxes
+    description: Move pending taxes into the treasury.
+    tier: safe
+    caps: {cooldown_seconds: 60}
+    http: {method: POST, url: /api/taxes/collect}
+
+  - name: sell_resource
+    description: Sell a resource at the current price.
+    tier: medium
+    caps: {per_day_calls: 20, per_day_amount: 300, amount_param: quantity}
+    http: {method: POST, url: /api/market/sell}
+    params:
+      resource: {type: string, enum: [food, water]}
+      quantity: {type: integer, min: 1, max: 1000}
 ```
 
 - `per_day_calls` limits how many calls succeed in a day (`daily_call_cap`).
