@@ -57,3 +57,30 @@ func TestConfirmFlagParses(t *testing.T) {
 		t.Fatalf("confirm must parse on a non-read tool: %v %+v", err, m)
 	}
 }
+
+func TestBackend(t *testing.T) {
+	tool := func(extra string) string {
+		return `{"version":1,"tools":[{"name":"ab","description":"d","tier":"read",` + extra + `}]}`
+	}
+	tests := []struct {
+		name string
+		doc  string
+		ok   bool
+	}{
+		{"default needs http", tool(`"http":{"method":"GET","url":"/x"}`), true},
+		{"explicit http", tool(`"backend":"http","http":{"method":"GET","url":"/x"}`), true},
+		{"http backend without binding", tool(`"backend":"http"`), false},
+		{"relay with no binding", tool(`"backend":"relay"`), true},
+		{"relay with empty binding", tool(`"backend":"relay","http":{}`), true},
+		{"relay with binding", tool(`"backend":"relay","http":{"method":"GET","url":"/x"}`), false},
+		{"unknown backend", tool(`"backend":"ftp","http":{"method":"GET","url":"/x"}`), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(strings.NewReader(tt.doc))
+			if (err == nil) != tt.ok {
+				t.Fatalf("err = %v, want ok=%v", err, tt.ok)
+			}
+		})
+	}
+}

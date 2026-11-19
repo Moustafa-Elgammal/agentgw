@@ -173,6 +173,42 @@ current rules the answer is `422` and nothing changes. An unknown id is `404 not
 
 Other replicas pick up the new active version within `--manifest-poll` (default 15s).
 
+## Relay (client-authoritative games)
+
+Tools marked `"backend": "relay"` in the manifest are not sent to a REST backend. The game
+client holds an outbound WebSocket to the gateway, and the gateway sends each call down it.
+
+**1. Mint a ticket.** The studio's backend calls `POST /v1/studio/relay/tickets`, signed like
+the other studio calls with the studio key. The signed `X-AG-Player` is the player the ticket is
+for. It returns `201`:
+
+```json
+{"ticket":"eyJ0Ijoi...","expires_at":"2026-01-02T03:05:05Z"}
+```
+
+A ticket lives 60 seconds, is signed with the relay secret and names tenant and player.
+
+**2. Connect.** The game client opens `GET /v1/relay/connect` as a WebSocket with
+`Authorization: Bearer <ticket>` (or `?ticket=<ticket>` where a header cannot be set). A bad or
+expired ticket gives `401 {"error":"invalid_ticket"}` before any upgrade. One socket per player:
+a new connection closes the old one with code 4000.
+
+**3. Frames.** JSON text frames, at most 1 MiB. Unknown `type` values are ignored; a frame that
+is not valid JSON closes the socket with code 1008.
+
+| Direction | Frame |
+|---|---|
+| gateway to client | `{"type":"hello","protocol":1}` once after connect |
+| gateway to client | `{"type":"call","id":"c1","tool":"build_structure","args":{"kind":"farm"},"idem":"...","player":"alice"}` |
+| client to gateway | `{"type":"result","id":"c1","ok":true,"data":{...}}` |
+| client to gateway | `{"type":"result","id":"c1","ok":false,"code":"insufficient_funds","message":"..."}` |
+
+The client answers each `call` with a `result` carrying the same `id`, within the call timeout
+(10 s). `idem` is stable across retries of one logical call; a game that applies state should
+deduplicate on it. A result for an unknown or expired id is dropped. If the player has no
+socket the agent sees `client_offline`. A timeout fails the call and releases its reservation.
+The gateway pings every 20 s and closes a socket that stops answering.
+
 ## Activity feed
 
 What a player's agents did, read back from the audit log. Two read only endpoints, signed like

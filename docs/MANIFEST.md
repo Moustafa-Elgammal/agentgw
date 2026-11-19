@@ -36,6 +36,7 @@ and a test keeps them identical.
 | `tools[].name` | `^[a-z][a-z0-9_]{1,63}$`, unique |
 | `tools[].description` | Required. The agent reads it, so write it for the agent |
 | `tools[].tier` | `read`, `safe`, `medium` or `sensitive` (sensitive is disabled in v1) |
+| `tools[].backend` | Optional. `http` (default) sends a signed REST call. `relay` sends the call over the player's game client WebSocket (see PROTOCOL.md, Relay) and takes no `http` binding |
 | `tools[].http` | `method` GET, POST, PUT, PATCH or DELETE. `url` is a path starting with `/`; `{name}` placeholders take values from params |
 | `tools[].params` | `type` is `string`, `integer`, `number` or `boolean`. Optional: `enum` (strings), `min`/`max` (numbers), `optional` |
 | `tools[].confirm` | Optional boolean. `true` makes every call wait for the player's approval (see DECISIONS.md, Confirmations). Not allowed on `read` tools |

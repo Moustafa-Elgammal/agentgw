@@ -32,7 +32,8 @@ internal/studiosig one verifier for studio and admin signed requests: key sets, 
 internal/policy    Policy and Switchboard interfaces, in-memory store
 internal/policy/redisstore  shared Redis store (Lua scripts, atomic across replicas)
 internal/policy/policytest  the contract every store must pass
-internal/connector Connector interface + level 0 REST connector
+internal/connector Connector interface, level 0 REST connector, Mux (picks the connector by tool backend)
+internal/relay     WebSocket relay for client-authoritative games: Hub, tickets, handlers, Bus (Memory); redisbus and bustest below it
 internal/audit     Auditor and Store interfaces, Ring (memory), slog, pgstore (Postgres)
 internal/activity  activity feed endpoints: player feed (studio key) and admin feed (admin key)
 internal/gateway   the pipeline (the tool set is swapped whole by SetManifest, safe during calls)
@@ -44,9 +45,7 @@ pkg/agentsig       request signing and verification (importable by Go backends)
 examples/city      example manifest and a fake backend
 ```
 
-Planned packages (see ROADMAP): `auth` and `authserver`
-(OAuth 2.1), `store` (Postgres, Redis), `relay` (WebSocket relay for client-authoritative
-games), `obs` (metrics and tracing).
+Planned packages (see ROADMAP): `obs` (metrics and tracing).
 
 ## Stdio bridge
 

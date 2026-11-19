@@ -83,6 +83,12 @@ type Param struct {
 	Optional bool     `json:"optional,omitempty"`
 }
 
+// Backend names how a tool reaches the game. The zero value means BackendHTTP.
+const (
+	BackendHTTP  = "http"  // signed REST call to the studio's backend (levels 0 and 1)
+	BackendRelay = "relay" // call sent over the game client's WebSocket (M5)
+)
+
 // Tool is one capability a player's agent may call.
 type Tool struct {
 	Name        string           `json:"name"`
@@ -90,6 +96,7 @@ type Tool struct {
 	Tier        Tier             `json:"tier"`
 	Caps        Caps             `json:"caps,omitempty"`
 	Confirm     bool             `json:"confirm,omitempty"` // every call needs the player's approval
+	Backend     string           `json:"backend,omitempty"` // BackendHTTP (default) or BackendRelay
 	HTTP        HTTPBinding      `json:"http"`
 	Params      map[string]Param `json:"params,omitempty"`
 }

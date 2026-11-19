@@ -25,7 +25,7 @@
 - [ ] Hosting: hosted multi-tenant service, self-hosted only, or both from the start?
 - [ ] Value-based caps: add a backend dry-run call so the gateway can cap coins, or keep caps on calls and numeric arguments?
 - [ ] Audit: hashes only, or redacted arguments as an opt-in?
-- [ ] Relay routing across replicas: Redis pub/sub or a broker such as NATS?
+- [x] Relay routing across replicas: Redis pub/sub and presence keys (decided for M5; revisit NATS if pilot scale needs it).
 - [ ] Player identity at consent: link tickets only, or also OIDC against the studio's identity provider?
 - [ ] Which Go SDK release to pin, and how to track MCP spec revisions after 2026-07-28?
 - [ ] Open core: what, if anything, stays out of the open-source repository?
@@ -286,3 +286,38 @@ admin key (`docs/PROTOCOL.md`).
 - **Not yet.** No export, no streaming and no aggregate counts. They can come with the M6
   dashboards. With several replicas on Postgres ids are global; on the in memory Ring they are
   per process.
+
+## Relay (M5)
+
+For games whose logic runs in the client (Unity and similar), the backend has no endpoint the
+gateway can call. The game opens an outbound WebSocket to the gateway instead, and tool calls go
+down that socket.
+
+- **Manifest: `backend` per tool.** `"backend": "relay"` sends the call over the player's socket.
+  The default, `"http"`, is unchanged. Relay tools take no `http` binding (rejected if present), so
+  one manifest can mix both. A compatibility addition: old manifests parse as before.
+- **Only the pipeline's last step changes.** Rate limit, validation, confirmation, caps, settle and
+  audit run the same for relay tools. `connector.Mux` picks the connector by backend. A relay tool
+  with no relay configured is a transport error, so it fails closed and releases its reservation.
+- **Library: `github.com/coder/websocket` v1.8.15.** Context aware, no transitive dependencies,
+  maintained. Chosen with the user over gorilla/websocket and a hand-rolled framer.
+- **Connecting: stateless signed tickets.** The studio's backend calls the studio-signed
+  `POST /v1/studio/relay/tickets` (the signed `X-AG-Player` names the player) and hands the
+  returned ticket to the game client. The client connects to `GET /v1/relay/connect` with the
+  ticket (`Authorization: Bearer`, or `?ticket=` where headers are not possible). A ticket is
+  HMAC signed with the relay secret, carries tenant, player and expiry (60 s), and is checked
+  before the upgrade. It needs no shared store, so any replica accepts it. A ticket can be reused
+  until it expires; it only opens a socket for that one player, and the newer socket replaces the
+  older one. The game client never holds the studio key.
+- **One socket per player.** A new connection closes the previous one (code 4000). Calls pending
+  on the replaced socket fail.
+- **Routing across replicas: Redis presence keys and pub/sub.** A replica claims
+  `tenant/player` with a TTL it refreshes while the socket lives. A call looks up the owner; if
+  the owner is another replica it publishes the call to that replica's inbox, and the result comes
+  back to the caller's inbox. Delivery is at most once. A lost message surfaces as a timeout,
+  which fails closed. The `Bus` interface keeps NATS possible later.
+- **Offline player.** No owner is an expected result `client_offline`, not a Go error. A timeout
+  or bus failure is a Go error, so the pipeline releases the reservation.
+- **Wire protocol v1** is JSON text frames: `hello`, `call` (gateway to client), `result` (client
+  to gateway). Results are validated no more than the HTTP connector's are: the game is the
+  authority, the gateway still limits what may be asked.

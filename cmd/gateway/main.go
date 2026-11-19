@@ -36,6 +36,8 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/mcpserver"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy/redisstore"
+	"github.com/Moustafa-Elgammal/agentgw/internal/relay"
+	"github.com/Moustafa-Elgammal/agentgw/internal/relay/redisbus"
 	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 )
 
@@ -101,6 +103,20 @@ func syncLoop(ctx context.Context, log *slog.Logger, m *manifeststore.Manager, e
 // reloadKeys loads the key set (the flag key plus the file's keys) into v and registers a
 // reload for SIGHUP. A failed reload keeps the keys in use and logs the error, so a typo in
 // the file never locks the studio out. It reports whether the first load worked.
+// mountRelay serves the game client's WebSocket and the studio's ticket endpoint when
+// AGENTGW_RELAY_SECRET is set. Without it relay tools answer client_offline.
+func mountRelay(log *slog.Logger, mux *http.ServeMux, hub *relay.Hub, tenant string, sv *studiosig.Verifier, ttl time.Duration) {
+	rs := os.Getenv("AGENTGW_RELAY_SECRET")
+	if rs == "" {
+		log.Info("relay", "enabled", false, "note", "set AGENTGW_RELAY_SECRET to serve game clients")
+		return
+	}
+	tickets := relay.NewTickets([]byte(rs), ttl, nil)
+	mux.Handle("/v1/relay/connect", relay.Handler(hub, tickets))
+	mux.Handle("/v1/studio/relay/tickets", relay.MintHandler(tickets, sv, tenant))
+	log.Info("relay", "enabled", true, "ticket_ttl", ttl.String())
+}
+
 func reloadKeys(log *slog.Logger, v *studiosig.Verifier, id string, secret []byte, file string, reloaders *[]func()) bool {
 	load := func() error {
 		keys := map[string][]byte{}
@@ -151,6 +167,7 @@ func main() {
 		adminKeys    = flag.String("admin-keys-file", "", "JSON file {\"key-id\":\"secret\"} of admin keys, for rotation. Reloaded on SIGHUP. Added to --admin-key-id")
 		adminKeyID   = flag.String("admin-key-id", "admin-1", "key id the studio uses to sign manifest calls (secret: AGENTGW_ADMIN_SECRET, must differ from the player key)")
 		manifestPoll = flag.Duration("manifest-poll", 15*time.Second, "how often to pick up a manifest version activated elsewhere (0 disables)")
+		relayTTL     = flag.Duration("relay-ticket-ttl", 60*time.Second, "how long a relay ticket stays valid (secret: AGENTGW_RELAY_SECRET; unset disables the relay)")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	flag.Parse()
@@ -171,6 +188,7 @@ func main() {
 	}
 
 	var pol policy.Policy = policy.NewMemory(policy.DefaultLimits, nil)
+	var relayBus relay.Bus = relay.NewMemory(nil)
 	if *redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{Addr: *redisAddr})
 		defer func() { _ = rdb.Close() }()
@@ -183,6 +201,7 @@ func main() {
 			os.Exit(1)
 		}
 		pol = rs
+		relayBus = redisbus.New(rdb, "agentgw:relay:")
 		log.Info("policy store", "kind", "redis", "addr", *redisAddr)
 	} else {
 		log.Warn("policy store", "kind", "memory", "note", "limits are per process and reset on restart")
@@ -225,9 +244,14 @@ func main() {
 	} else {
 		log.Warn("confirmation and auth stores", "kind", "memory", "note", "approvals, clients and grants are per process and lost on restart")
 	}
+	relayHub := relay.NewHub(relayBus)
+	if err := relayHub.Start(ctx0); err != nil {
+		log.Error("relay", "err", err)
+		os.Exit(1)
+	}
 	svc := gateway.New(m,
 		pol,
-		connector.NewHTTP(*backendURL, *keyID, []byte(secret)),
+		connector.Mux{HTTP: connector.NewHTTP(*backendURL, *keyID, []byte(secret)), Relay: relay.NewConnector(relayHub)},
 		audit.Multi{audit.Slog{L: log}, auditStore},
 		gateway.WithConfirmations(confirmations))
 
@@ -294,6 +318,7 @@ func main() {
 		mux.Handle("/v1/studio/confirmations/", studio)
 		// The player's own activity feed: what their agents did, signed by the studio.
 		mux.Handle(activity.PlayerPath, activity.PlayerHandler(auditStore, *tenant, sv))
+		mountRelay(log, mux, relayHub, *tenant, sv, *relayTTL)
 		if adminSecret := os.Getenv("AGENTGW_ADMIN_SECRET"); adminSecret != "" || *adminKeys != "" {
 			av := studiosig.New(studiosig.Config{MaxBody: manifeststore.MaxUpload})
 			if !reloadKeys(log, av, *adminKeyID, []byte(adminSecret), *adminKeys, &reloaders) {

@@ -60,7 +60,7 @@ transport is stateless on purpose: identity is resolved per request, never carri
 3. A failed backend call must release its reservation and must not start a cooldown.
 4. Policy store errors fail closed.
 5. Audit stores a hash of arguments, never the arguments.
-6. Dependencies are kept minimal (today: `go-sdk`, `goccy/go-yaml`, `go-redis`, `pgx`). Adding one needs a reason in
+6. Dependencies are kept minimal (today: `go-sdk`, `goccy/go-yaml`, `go-redis`, `pgx`, `coder/websocket`). Adding one needs a reason in
    the PR and an entry in `docs/DECISIONS.md`, and ask first.
 7. Compatibility changes (manifest format, signed request, policy semantics) get an entry in
    `docs/DECISIONS.md` first.
@@ -68,7 +68,9 @@ transport is stateless on purpose: identity is resolved per request, never carri
 9. Anything that needs a service or tool gets a Dockerfile target or compose service. Never ask
    the user to install it on the host.
 
-## Current focus: M5 next, M4 done (see `docs/ROADMAP.md`)
+## Current focus: M5 built, M6 next (see `docs/ROADMAP.md`)
+
+M5: `internal/relay` (Hub, signed tickets, `Handler`, `MintHandler`, `Bus` with Memory and `redisbus`, contract suite `bustest`), `backend: relay` tools via `connector.Mux`; enabled by `AGENTGW_RELAY_SECRET`. Decisions in `docs/DECISIONS.md`.
 
 M4 so far: versioned manifests (`internal/manifeststore`, memory plus `pgstore`), hot swap in
 `gateway.Service.SetManifest`, and admin-signed `/v1/studio/manifest` endpoints (separate admin key,

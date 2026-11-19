@@ -11,7 +11,7 @@ the contract is a manifest plus a signed HTTP request, not a library.
 **Status: M0 to M2 and M4 done, M3 nearly done.** The core pipeline, MCP transport, Redis
 and Postgres stores and player confirmations work and are tested. Players link their agent with
 OAuth (M3, see below). A studio can upload and roll back its manifest and rotate its signing keys
-without a restart, and read an activity feed of what agents did (M4). The one open M3 item is OIDC login at consent. Next is the relay (M5). See
+without a restart, and read an activity feed of what agents did (M4). The one open M3 item is OIDC login at consent. The relay for client-authoritative games (M5) is built: tools with `backend: relay` go over the game client's WebSocket. See
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Two modes for players
@@ -39,7 +39,7 @@ without a restart, and read an activity feed of what agents did (M4). The one op
 | Activity feed: what a player's agents did, player and admin views, retention (memory or Postgres) | `internal/activity`, `internal/audit/pgstore` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: OIDC login at consent, relay for client-authoritative games (M5). Set `--postgres-url` to
+Not yet: OIDC login at consent. Set `--postgres-url` to
 keep clients, grants and approvals across restarts.
 With `--dev-auth` (the compose demo) the dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.

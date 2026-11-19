@@ -116,16 +116,25 @@ func (m *Manifest) Validate() error {
 		if !t.Tier.Valid() {
 			add("%s: unknown tier %q", where, t.Tier)
 		}
-		if !validMethod[t.HTTP.Method] {
-			add("%s: http.method must be one of GET, POST, PUT, PATCH, DELETE", where)
-		}
-		if !strings.HasPrefix(t.HTTP.URL, "/") {
-			add("%s: http.url must be a path starting with /", where)
-		}
-		for _, ph := range placeholder.FindAllStringSubmatch(t.HTTP.URL, -1) {
-			if _, ok := t.Params[ph[1]]; !ok {
-				add("%s: url placeholder {%s} has no matching param", where, ph[1])
+		switch t.Backend {
+		case "", core.BackendHTTP:
+			if !validMethod[t.HTTP.Method] {
+				add("%s: http.method must be one of GET, POST, PUT, PATCH, DELETE", where)
 			}
+			if !strings.HasPrefix(t.HTTP.URL, "/") {
+				add("%s: http.url must be a path starting with /", where)
+			}
+			for _, ph := range placeholder.FindAllStringSubmatch(t.HTTP.URL, -1) {
+				if _, ok := t.Params[ph[1]]; !ok {
+					add("%s: url placeholder {%s} has no matching param", where, ph[1])
+				}
+			}
+		case core.BackendRelay:
+			if t.HTTP.Method != "" || t.HTTP.URL != "" {
+				add("%s: relay tools take no http binding", where)
+			}
+		default:
+			add("%s: backend must be %q or %q", where, core.BackendHTTP, core.BackendRelay)
 		}
 		if t.Confirm && t.Tier == core.TierRead {
 			add("%s: read tools cannot require confirmation", where)
