@@ -267,6 +267,12 @@ func main() {
 		relayFrames   = flag.Int("relay-max-frames-per-sec", 100, "frames per second one game client may send before its socket is closed (burst is twice this)")
 		opsAddr       = flag.String("ops-addr", "127.0.0.1:9090", "listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables)")
 		maxScope      = flag.String("max-scope", os.Getenv("AGENTGW_MAX_SCOPE"), "the most any player may grant: coach (read only, recommended for a first pilot) or operator. Empty means operator")
+		oidcIssuer    = flag.String("oidc-issuer", "", "turn on sign in with your identity provider at the consent page: its OIDC issuer URL. Needs --oidc-client-id and the secrets AGENTGW_OIDC_CLIENT_SECRET and AGENTGW_OIDC_SESSION_SECRET (not with --dev-auth)")
+		oidcClientID  = flag.String("oidc-client-id", "", "OIDC client id registered at the identity provider, with the redirect URI <public-url>/authorize/oidc/callback")
+		oidcClaim     = flag.String("oidc-player-claim", "sub", "ID token claim that carries the player id your game uses. It must be stable for a person for ever: not an email address or a display name")
+		oidcScopes    = flag.String("oidc-scopes", "openid", "scopes requested from the identity provider, space or comma separated (openid is always included)")
+		oidcAlgs      = flag.String("oidc-algs", "RS256,ES256", "ID token signature algorithms accepted. Asymmetric only: none and the HS family are refused")
+		oidcHTTP      = flag.Bool("oidc-allow-insecure-http", false, "DEV ONLY: allow an http issuer on a loopback address, for a local identity provider")
 		maxBody       = flag.Int64("max-body", 1048576, "largest request body in bytes. OAuth and studio endpoints keep their lower caps, manifest upload its own")
 		redisAddr     = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
@@ -480,6 +486,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	if *devAuth {
+		if *oidcIssuer != "" {
+			log.Error("--oidc-issuer needs OAuth mode: remove --dev-auth, which has no consent page")
+			os.Exit(1)
+		}
 		log.Warn("DEV AUTH ENABLED: identity comes from the X-Dev-Player header and the dev API is mounted. Never expose this listener beyond loopback")
 		mux.Handle("/mcp", mcpserver.Handler(svc, mcpserver.DevAuth(*tenant)))
 		mux.Handle("/", httpapi.New(svc, httpapi.Config{Tenant: *tenant, Confirmations: confirmations, Switches: switches}))
@@ -496,7 +506,13 @@ func main() {
 		if !reloadKeys(log, sv, "studio", *studioKeyID, []byte(secret), *studioKeys, *studioOnly, keyReloads, &reloaders) {
 			os.Exit(1)
 		}
+		oidcLogin, err := buildOIDC(ctx0, log, oidcOptions{Issuer: *oidcIssuer, ClientID: *oidcClientID, PlayerClaim: *oidcClaim, Scopes: *oidcScopes, Algs: *oidcAlgs, AllowHTTP: *oidcHTTP}, *publicURL)
+		if err != nil {
+			log.Error("oidc", "err", err)
+			os.Exit(1)
+		}
 		as := auth.NewServer(auth.ServerConfig{
+			OIDC:  oidcLogin,
 			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant, MaxScope: scopeCap,
 			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret), Verifier: sv,
 			RegisterPerHour: *registerHour, MaxClients: *maxClients, ClientIPHeader: *clientIPHdr,
