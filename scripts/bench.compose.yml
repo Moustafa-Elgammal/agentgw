@@ -1,0 +1,7 @@
+# Used by scripts/bench-overhead.sh on top of docker-compose.yml. The fake city starts with a huge
+# stock, so repeated sells keep succeeding and every call takes the full path (reserve, signed
+# call, settle) instead of ending in a backend refusal once the food runs out.
+services:
+  city-backend:
+    environment:
+      - BACKEND_STOCK=1000000000

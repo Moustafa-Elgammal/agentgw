@@ -50,8 +50,23 @@ func (s summary) ErrorRate() float64 {
 
 type sample struct {
 	d      time.Duration
-	status int    // 0 means transport error
-	code   string // denial code for a 422
+	status int           // 0 means transport error
+	code   string        // denial code for a 422
+	at     time.Duration // when the call started, since the run began (used to drop a warmup)
+}
+
+// afterWarmup returns the samples that started at or after warmup.
+func afterWarmup(samples []sample, warmup time.Duration) []sample {
+	if warmup <= 0 {
+		return samples
+	}
+	out := make([]sample, 0, len(samples))
+	for _, x := range samples {
+		if x.at >= warmup {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // summarize turns samples into a summary. A transport error or a 5xx is an error, a 2xx is

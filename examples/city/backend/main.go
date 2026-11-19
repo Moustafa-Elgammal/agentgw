@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -33,7 +34,13 @@ func main() {
 		log.Fatal("set AGENTGW_SIGNING_SECRET or AGENTGW_SIGNING_KEYS_FILE")
 	}
 	keys := newKeyset("dev-1", secret, keysFile)
-	c := &city{Coins: 500, Res: map[string]int{"food": 60, "water": 60, "materials": 60}}
+	// BACKEND_STOCK sets the starting stock of each resource (default 60). Benchmarks raise it so
+	// repeated sells keep succeeding instead of running the city out of food.
+	stock := 60
+	if v, err := strconv.Atoi(os.Getenv("BACKEND_STOCK")); err == nil && v > 0 {
+		stock = v
+	}
+	c := &city{Coins: 500, Res: map[string]int{"food": stock, "water": stock, "materials": stock}}
 	prices := map[string]int{"food": 2, "water": 1, "materials": 4}
 
 	verify := func(h func(w http.ResponseWriter, r *http.Request, body []byte)) http.HandlerFunc {

@@ -1,0 +1,102 @@
+---
+// What the gateway adds to a call, from site/src/data/overhead.json (written by
+// `scripts/bench-report.py overhead` after scripts/bench-overhead.sh). Inline SVG drawn at build
+// time, no chart library, no import.meta. The muted bar is the backend alone, the accent bar is the
+// same request through the gateway.
+import d from '../data/overhead.json';
+
+const nice = (max: number) => {
+  const p = 10 ** Math.floor(Math.log10(max || 1));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= max) return m * p;
+  return 10 * p;
+};
+const ms = (n: number) => (n >= 10 ? n.toFixed(1) : n.toFixed(2));
+const num = (n: number) => Math.round(n).toLocaleString('en-US');
+const sign = (n: number) => (n >= 0 ? '+' : '-') + ms(Math.abs(n));
+
+const kinds = [
+  { key: 'read', title: 'A read tool', sub: 'get_city_state: look up, rate limit, validate, signed call, audit' },
+  { key: 'action', title: 'A capped action tool', sub: 'sell_resource: also reserve a daily cap, then settle it' },
+] as const;
+const pcts = ['p50', 'p95', 'p99'] as const;
+
+const charts = kinds.map((k) => {
+  const v = (d.paced as any)[k.key];
+  const rows = pcts.map((p) => ({ p, direct: v.direct[`${p}_ms`] as number, gateway: v.gateway[`${p}_ms`] as number }));
+  const max = nice(Math.max(...rows.flatMap((r) => [r.direct, r.gateway])) * 1.12);
+  return { ...k, v, rows, max };
+});
+const read = (d.paced as any).read;
+const action = (d.paced as any).action;
+const maxRead = (d.max as any).read;
+const maxAction = (d.max as any).action;
+const BAR = 330; // pixels for the longest value
+---
+<div class="gw-perf gw-overhead">
+  <div class="gw-tiles">
+    <div class="gw-tile"><span class="v">{sign(read.added_ms.p50)}<small> ms</small></span><span class="k">added at the median, read tool</span></div>
+    <div class="gw-tile"><span class="v">{sign(action.added_ms.p50)}<small> ms</small></span><span class="k">added at the median, capped action tool</span></div>
+    <div class="gw-tile"><span class="v">{sign(Math.max(read.added_ms.p99, action.added_ms.p99))}<small> ms</small></span><span class="k">added at p99, the worse of the two</span></div>
+    <div class="gw-tile"><span class="v">{num(Math.min(maxRead.gateway.rps, maxAction.gateway.rps))}<small>/s</small></span><span class="k">calls per second through one gateway, flat out</span></div>
+  </div>
+
+  <div class="gw-legend" aria-hidden="true">
+    <span><i class="sw direct"></i>Backend alone</span>
+    <span><i class="sw gw"></i>Through the gateway</span>
+  </div>
+
+  <div class="gw-chartgrid">
+    {charts.map((c) => (
+      <figure class="gw-chart">
+        <figcaption>{c.title} <span>{c.sub}. Milliseconds at {d.rate} calls per second.</span></figcaption>
+        <svg viewBox="0 0 520 230" role="img" aria-label={`${c.title}, milliseconds: ${c.rows.map((r) => `${r.p} ${ms(r.direct)} alone and ${ms(r.gateway)} through the gateway`).join('; ')}`}>
+          {c.rows.map((r, i) => {
+            const y = 14 + i * 72;
+            const wd = Math.max(2, (r.direct / c.max) * BAR);
+            const wg = Math.max(2, (r.gateway / c.max) * BAR);
+            return (
+              <g>
+                <text class="axis" x="40" y={y + 30} text-anchor="end">{r.p}</text>
+                <rect class="bar-direct" x="48" y={y} width={wd} height="26"><title>{`${r.p} alone: ${ms(r.direct)} ms`}</title></rect>
+                <text class="val" x={48 + wd + 8} y={y + 18}>{ms(r.direct)} ms</text>
+                <rect class="bar" x="48" y={y + 30} width={wg} height="26"><title>{`${r.p} through the gateway: ${ms(r.gateway)} ms`}</title></rect>
+                <text class="val" x={48 + wg + 8} y={y + 48}>{ms(r.gateway)} ms</text>
+              </g>
+            );
+          })}
+        </svg>
+      </figure>
+    ))}
+  </div>
+
+  <details class="gw-perf-table">
+    <summary>Show the numbers as a table</summary>
+    <table>
+      <thead><tr><th>Run</th><th>p50</th><th>p95</th><th>p99</th><th>Calls per second</th></tr></thead>
+      <tbody>
+        {kinds.map((k) => (
+          <>
+            <tr><td>{k.title}, alone, {d.rate}/s</td><td>{ms((d.paced as any)[k.key].direct.p50_ms)} ms</td><td>{ms((d.paced as any)[k.key].direct.p95_ms)} ms</td><td>{ms((d.paced as any)[k.key].direct.p99_ms)} ms</td><td>{num((d.paced as any)[k.key].direct.rps)}</td></tr>
+            <tr><td>{k.title}, through the gateway, {d.rate}/s</td><td>{ms((d.paced as any)[k.key].gateway.p50_ms)} ms</td><td>{ms((d.paced as any)[k.key].gateway.p95_ms)} ms</td><td>{ms((d.paced as any)[k.key].gateway.p99_ms)} ms</td><td>{num((d.paced as any)[k.key].gateway.rps)}</td></tr>
+            <tr><td>{k.title}, added by the gateway</td><td>{sign((d.paced as any)[k.key].added_ms.p50)} ms</td><td>{sign((d.paced as any)[k.key].added_ms.p95)} ms</td><td>{sign((d.paced as any)[k.key].added_ms.p99)} ms</td><td></td></tr>
+          </>
+        ))}
+        {kinds.map((k) => (
+          <>
+            <tr><td>{k.title}, alone, flat out</td><td>{ms((d.max as any)[k.key].direct.p50_ms)} ms</td><td>{ms((d.max as any)[k.key].direct.p95_ms)} ms</td><td>{ms((d.max as any)[k.key].direct.p99_ms)} ms</td><td>{num((d.max as any)[k.key].direct.rps)}</td></tr>
+            <tr><td>{k.title}, through the gateway, flat out</td><td>{ms((d.max as any)[k.key].gateway.p50_ms)} ms</td><td>{ms((d.max as any)[k.key].gateway.p95_ms)} ms</td><td>{ms((d.max as any)[k.key].gateway.p99_ms)} ms</td><td>{num((d.max as any)[k.key].gateway.rps)}</td></tr>
+          </>
+        ))}
+      </tbody>
+    </table>
+  </details>
+
+  <p class="gw-perf-note">
+    Median of {d.reps} repetitions, each {d.duration_s} seconds paced and {d.max_duration_s} seconds flat out after a {d.warmup_s} second warmup, with {d.concurrency} workers and {num(d.players)} simulated players. Measured on {d.env},
+    on {d.generated}. The fake backend answers in microseconds, so almost all of the time shown is the gateway's own work
+    (policy in Redis, validation, signing, the audit write), and a real game backend
+    that takes tens of milliseconds will make the gateway's share much smaller. "Flat out" is limited by this one laptop and
+    by the load generator, so read it as a floor for one gateway process, not a ceiling. Repeat it with
+    <code>scripts/bench-overhead.sh</code>, described in the <a href={`${Astro.url.pathname}operate/runbook/`}>runbook</a>.
+  </p>
+</div>

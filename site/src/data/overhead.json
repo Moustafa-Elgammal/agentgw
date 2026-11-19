@@ -1,0 +1,139 @@
+{
+ "generated": "2026-11-19",
+ "env": "Docker Desktop (aarch64), Docker 29.9.3 with 8 CPUs and 8 GiB, one gateway, Redis, Postgres and a fake backend on the same machine",
+ "reps": 3,
+ "duration_s": 60,
+ "max_duration_s": 20,
+ "warmup_s": 5,
+ "rate": 100,
+ "concurrency": 32,
+ "players": 20000,
+ "paced": {
+  "read": {
+   "tool": "get_city_state",
+   "direct": {
+    "p50_ms": 0.661,
+    "p95_ms": 1.925,
+    "p99_ms": 4.149,
+    "max_ms": 15.528,
+    "rps": 99.9,
+    "calls": 17977,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "gateway": {
+    "p50_ms": 2.913,
+    "p95_ms": 5.464,
+    "p99_ms": 8.228,
+    "max_ms": 30.93,
+    "rps": 99.9,
+    "calls": 17986,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "added_ms": {
+    "p50": 2.252,
+    "p95": 3.539,
+    "p99": 4.079
+   },
+   "throughput_ratio": 1.0
+  },
+  "action": {
+   "tool": "sell_resource",
+   "direct": {
+    "p50_ms": 0.714,
+    "p95_ms": 1.664,
+    "p99_ms": 2.938,
+    "max_ms": 11.973,
+    "rps": 99.9,
+    "calls": 17982,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "gateway": {
+    "p50_ms": 3.232,
+    "p95_ms": 5.122,
+    "p99_ms": 6.648,
+    "max_ms": 28.6,
+    "rps": 99.9,
+    "calls": 17991,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "added_ms": {
+    "p50": 2.518,
+    "p95": 3.458,
+    "p99": 3.71
+   },
+   "throughput_ratio": 1.0
+  }
+ },
+ "max": {
+  "read": {
+   "tool": "get_city_state",
+   "direct": {
+    "p50_ms": 0.162,
+    "p95_ms": 0.872,
+    "p99_ms": 1.568,
+    "max_ms": 10.45,
+    "rps": 117899.4,
+    "calls": 7183686,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "gateway": {
+    "p50_ms": 2.466,
+    "p95_ms": 3.834,
+    "p99_ms": 5.428,
+    "max_ms": 40.749,
+    "rps": 11963.9,
+    "calls": 722142,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "added_ms": {
+    "p50": 2.304,
+    "p95": 2.962,
+    "p99": 3.86
+   },
+   "throughput_ratio": 0.101
+  },
+  "action": {
+   "tool": "sell_resource",
+   "direct": {
+    "p50_ms": 0.182,
+    "p95_ms": 1.057,
+    "p99_ms": 1.752,
+    "max_ms": 16.985,
+    "rps": 101532.0,
+    "calls": 5986325,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "gateway": {
+    "p50_ms": 2.593,
+    "p95_ms": 4.411,
+    "p99_ms": 6.384,
+    "max_ms": 63.956,
+    "rps": 11260.3,
+    "calls": 674679,
+    "errors": 0,
+    "denied": 0,
+    "reps": 3
+   },
+   "added_ms": {
+    "p50": 2.411,
+    "p95": 3.354,
+    "p99": 4.632
+   },
+   "throughput_ratio": 0.111
+  }
+ }
+}

@@ -22,3 +22,6 @@ site/src/content/docs/*
 .DS_Store
 /.unity-out/
 /.claude/worktrees/
+/bench-results/
+site/audit/node_modules/
+site/audit/out/

@@ -7,6 +7,20 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/bench-overhead.sh` and `test/load --direct-url --warmup --json`: measure what the
+  gateway adds to a call by sending the same signed request directly to the backend and through
+  the gateway. The homepage shows the result.
+- The fake city backend takes `BACKEND_STOCK` to start with more stock (used by the benchmark).
+
+### Fixed
+
+- The connector now keeps up to 100 idle connections to the backend (`MaxIdleConnsPerHost`, which
+  defaulted to 2). Above 2 concurrent calls it closed connections after every call, filled
+  TIME_WAIT and ended in `backend_unavailable` at high load. Found by the overhead benchmark.
+- `test/load` no longer counts a call cut off by the end of the run as an error.
+
 ## [0.1.0] - unreleased
 
 First public release. The date is set when the tag is cut.

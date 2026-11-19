@@ -86,6 +86,11 @@ func main() {
 		maxP99   = flag.Duration("max-p99", 500*time.Millisecond, "fail when p99 latency is above this (0 disables)")
 		minRPS   = flag.Float64("min-rps", 0, "fail when throughput is below this (0 disables)")
 		timeout  = flag.Duration("timeout", 10*time.Second, "per request timeout")
+		warmup   = flag.Duration("warmup", 0, "extra time run first and left out of the report, so connections and caches are warm")
+		direct   = flag.String("direct-url", "", "send each call straight to the fake city backend at this URL, signed like the gateway signs, instead of through the gateway (to measure what the gateway adds)")
+		directID = flag.String("direct-key-id", "dev-1", "key id for --direct-url signatures")
+		directSc = flag.String("direct-secret", os.Getenv("AGENTGW_SIGNING_SECRET"), "secret for --direct-url signatures (default AGENTGW_SIGNING_SECRET, or dev-secret)")
+		jsonOut  = flag.Bool("json", false, "also print the result as one JSON line starting with JSON")
 	)
 	flag.Parse()
 
@@ -115,12 +120,24 @@ func main() {
 			fatal(fmt.Errorf("no arguments known for tool %q, add it with --args-file", n))
 		}
 	}
-	if *workers < 1 || *players < 1 || *duration <= 0 || *rate < 0 {
-		fatal(errors.New("concurrency, players, duration must be positive and rate not negative"))
+	if *workers < 1 || *players < 1 || *duration <= 0 || *rate < 0 || *warmup < 0 {
+		fatal(errors.New("concurrency, players, duration must be positive and rate and warmup not negative"))
+	}
+	var signer *directSigner
+	if *direct != "" {
+		if *directSc == "" {
+			*directSc = "dev-secret"
+		}
+		signer = &directSigner{keyID: *directID, secret: []byte(*directSc)}
+		for _, n := range m.names {
+			if _, ok := directRoutes[n]; !ok {
+				fatal(fmt.Errorf("direct mode has no route for tool %q", n))
+			}
+		}
 	}
 
 	client := &http.Client{Timeout: *timeout, Transport: &http.Transport{MaxIdleConnsPerHost: *workers}}
-	ctx, cancel := context.WithTimeout(context.Background(), *duration)
+	ctx, cancel := context.WithTimeout(context.Background(), *warmup+*duration)
 	defer cancel()
 
 	var (
@@ -153,7 +170,18 @@ func main() {
 				i := int(n.Add(1) - 1)
 				tool := m.pick(i)
 				player := "load-" + strconv.Itoa(i%*players)
-				local = append(local, one(ctx, client, *base, player, tool, args[tool]))
+				begin := time.Now()
+				var smp sample
+				if signer != nil {
+					smp = oneDirect(ctx, client, signer, *direct, player, tool, args[tool], "load-"+strconv.Itoa(i))
+				} else {
+					smp = one(ctx, client, *base, player, tool, args[tool])
+				}
+				if smp.status == 0 && ctx.Err() != nil {
+					break // cut off by the end of the run, not a failure of the system under test
+				}
+				smp.at = begin.Sub(start)
+				local = append(local, smp)
 			}
 			mu.Lock()
 			samples = append(samples, local...)
@@ -161,8 +189,16 @@ func main() {
 		}()
 	}
 	wg.Wait()
-	s := summarize(samples, time.Since(start))
+	elapsed := time.Since(start)
+	if *warmup > 0 {
+		samples = afterWarmup(samples, *warmup)
+		elapsed -= *warmup
+	}
+	s := summarize(samples, elapsed)
 	report(s)
+	if *jsonOut {
+		printJSON(s, signer != nil)
+	}
 
 	var fails []string
 	if s.ErrorRate() > *maxErr {
@@ -228,6 +264,39 @@ func one(ctx context.Context, c *http.Client, base, player, tool, args string) s
 		s.code = r.Code
 	}
 	return s
+}
+
+// oneDirect sends one call straight to the backend. A 2xx is ok, a 4xx is counted as a denial by
+// its status, and a transport error or 5xx is an error, the same classification as through the gateway.
+func oneDirect(ctx context.Context, c *http.Client, d *directSigner, base, player, tool, args, idem string) sample {
+	req, err := d.request(ctx, base, player, tool, args, idem)
+	if err != nil {
+		return sample{}
+	}
+	t0 := time.Now()
+	resp, err := c.Do(req)
+	if err != nil {
+		return sample{d: time.Since(t0)}
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+	return sample{d: time.Since(t0), status: resp.StatusCode}
+}
+
+func msf(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
+
+// printJSON prints the result on one line for scripts (scripts/bench-overhead.sh reads it).
+func printJSON(s summary, direct bool) {
+	denied := 0
+	for _, n := range s.Denials {
+		denied += n
+	}
+	b, _ := json.Marshal(map[string]any{
+		"direct": direct, "calls": s.Total, "ok": s.OK, "denied": denied, "errors": s.Errors,
+		"rps": s.RPS(), "p50_ms": msf(s.P50), "p95_ms": msf(s.P95), "p99_ms": msf(s.P99), "max_ms": msf(s.Max),
+		"elapsed_s": s.Elapsed.Seconds(),
+	})
+	fmt.Println("JSON " + string(b))
 }
 
 func report(s summary) {

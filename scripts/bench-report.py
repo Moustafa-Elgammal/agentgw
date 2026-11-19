@@ -5,6 +5,12 @@
 
 Reads load.txt (the load tool's report) and samples.csv (resource samples). Stdlib only. The
 numbers are copied, never rounded up: the page shows exactly what the run measured.
+
+    python3 scripts/bench-report.py overhead bench-results/<run> [--out site/src/data/overhead.json]
+
+The overhead form reads runs.jsonl and meta.json from scripts/bench-overhead.sh, takes the median
+over the repetitions of each measure on its own, and writes what the gateway adds (through the
+gateway minus direct) at p50, p95 and p99.
 """
 import csv, json, platform, re, sys
 from datetime import datetime, timezone
@@ -16,6 +22,8 @@ def dur_ms(s):
     return v * {"µs": 0.001, "us": 0.001, "ms": 1.0, "s": 1000.0}[u]
 
 def main():
+    if sys.argv[1:2] == ["overhead"]:
+        return overhead()
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     out = Path("site/src/data/soak.json")
     if "--out" in sys.argv:
@@ -65,5 +73,62 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data, indent=1) + "\n")
     print(f"wrote {out}: {data['calls']} calls, p99 {data['latency_ms']['p99']} ms, {data['errors']} errors")
+
+
+def overhead():
+    import statistics
+    rest = sys.argv[2:]
+    out = Path("site/src/data/overhead.json")
+    if "--out" in rest:
+        i = rest.index("--out")
+        out = Path(rest[i + 1])
+        rest = rest[:i] + rest[i + 2:]
+    if len(rest) != 1:
+        sys.exit(__doc__)
+    run = Path(rest[0])
+    meta = json.loads((run / "meta.json").read_text())
+    runs = [json.loads(l) for l in (run / "runs.jsonl").read_text().splitlines() if l.strip()]
+    groups = {}
+    for r in runs:
+        groups.setdefault((r["phase"], r["tool"], r["mode"]), []).append(r["r"])
+    def med(rs, k):
+        return round(statistics.median(x[k] for x in rs), 3)
+    def stat(rs):
+        return {
+            "p50_ms": med(rs, "p50_ms"), "p95_ms": med(rs, "p95_ms"), "p99_ms": med(rs, "p99_ms"),
+            "max_ms": med(rs, "max_ms"), "rps": round(statistics.median(x["rps"] for x in rs), 1),
+            "calls": sum(x["calls"] for x in rs), "errors": sum(x["errors"] for x in rs),
+            "denied": sum(x["denied"] for x in rs), "reps": len(rs),
+        }
+    tools = {"get_city_state": "read", "sell_resource": "action"}
+    data = {
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "env": f"{meta['os']} ({meta['arch']}), Docker {meta['docker']} with {meta['cpus']} CPUs and {round(meta['mem_bytes'] / 2**30)} GiB, one gateway, Redis, Postgres and a fake backend on the same machine",
+        "reps": meta["reps"], "duration_s": meta["duration_s"], "max_duration_s": meta["max_duration_s"],
+        "warmup_s": meta["warmup_s"], "rate": meta["rate"], "concurrency": meta["concurrency"], "players": meta["players"],
+        "paced": {}, "max": {},
+    }
+    for phase in ("paced", "max"):
+        for tool, kind in tools.items():
+            d, g = groups.get((phase, tool, "direct")), groups.get((phase, tool, "gateway"))
+            if not d or not g:
+                sys.exit(f"missing runs for {phase} {tool}")
+            ds, gs = stat(d), stat(g)
+            data[phase][kind] = {
+                "tool": tool, "direct": ds, "gateway": gs,
+                "added_ms": {k: round(gs[f"{k}_ms"] - ds[f"{k}_ms"], 3) for k in ("p50", "p95", "p99")},
+                "throughput_ratio": round(gs["rps"] / ds["rps"], 3) if ds["rps"] else None,
+            }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(data, indent=1) + "\n")
+    for phase in ("paced", "max"):
+        for kind, v in data[phase].items():
+            a = v["added_ms"]
+            print(f"{phase:5} {kind:6} direct p50 {v['direct']['p50_ms']:.2f} p99 {v['direct']['p99_ms']:.2f} ms {v['direct']['rps']:.0f}/s | gateway p50 {v['gateway']['p50_ms']:.2f} p99 {v['gateway']['p99_ms']:.2f} ms {v['gateway']['rps']:.0f}/s | added p50 {a['p50']:+.2f} p95 {a['p95']:+.2f} p99 {a['p99']:+.2f} ms")
+    bad = [(k, v) for ph in ("paced", "max") for k, v in data[ph].items() if v["direct"]["errors"] or v["gateway"]["errors"]]
+    if bad:
+        print("WARNING: some runs had errors, read the numbers with care")
+    print(f"wrote {out}")
+
 
 main()

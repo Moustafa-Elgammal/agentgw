@@ -76,3 +76,14 @@ func TestParseMix(t *testing.T) {
 		}
 	}
 }
+
+func TestAfterWarmup(t *testing.T) {
+	in := []sample{{d: ms(1), at: 0}, {d: ms(2), at: ms(4999)}, {d: ms(3), at: ms(5000)}, {d: ms(4), at: ms(9000)}}
+	if got := afterWarmup(in, 0); len(got) != 4 {
+		t.Fatalf("no warmup must keep everything, got %d", len(got))
+	}
+	got := afterWarmup(in, ms(5000))
+	if len(got) != 2 || got[0].d != ms(3) || got[1].d != ms(4) {
+		t.Fatalf("warmup must drop calls that started before it: %+v", got)
+	}
+}

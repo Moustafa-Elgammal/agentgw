@@ -434,6 +434,31 @@ Docker Compose, one gateway, Redis, Postgres and the fake backend on the same ma
 | Postgres sessions | 14, flat for the second half: the gateway's pool at its cap of 8 plus Postgres's own 6 |
 | `/readyz` | 200 in all 97 samples |
 
+### What the gateway adds per call
+
+`scripts/bench-overhead.sh` sends the same signed request straight to the fake city backend
+(`test/load --direct-url`) and through the gateway, with the same workers and rate, so the
+difference is the gateway's own work: policy in Redis, validation, signing and the audit write.
+
+```bash
+scripts/bench-overhead.sh                                            # about 20 minutes, 3 repetitions
+DURATION=10 MAX_DURATION=5 WARMUP=2 REPS=1 scripts/bench-overhead.sh # quick check of the script
+python3 scripts/bench-report.py overhead bench-results/<run>         # write site/src/data/overhead.json
+```
+
+Each repetition runs two tools, a read tool (`get_city_state`) and a capped action tool
+(`sell_resource`), each direct and then through the gateway, in two phases: paced at `RATE` calls
+per second for `DURATION` seconds, and flat out (rate 0) for `MAX_DURATION` seconds. The first
+`WARMUP` seconds of every run are dropped, and the reported value of each measure is the median over
+the repetitions. The stack uses its own compose project (`agentgw-bench`) and a fake backend with a
+huge stock (`scripts/bench.compose.yml`), so every action call succeeds and takes the full path:
+reserve, signed call, settle.
+
+Read it with care. The fake backend answers in microseconds, so the gateway looks large in relative
+terms. A real backend that takes tens of milliseconds makes the gateway's share small. "Flat out" is
+bounded by the machine and by the load generator, so treat it as a floor for one gateway process.
+`test/load --direct-url` and `--warmup` also work on their own.
+
 Read your own run against these. The numbers show what the gateway adds, not what a real game
 backend costs. The Postgres container's memory kept rising during the run (27 to 154 MiB), which
 is what the audit write path note (`docs/design/audit-write-path.md`) is about.
