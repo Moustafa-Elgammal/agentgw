@@ -1,0 +1,6 @@
+# Used only by docs/tutorials/01-play-the-example-game.sh: moves the published ports so the
+# script never collides with a demo you already have running.
+services:
+  gateway:
+    ports: !override
+      - "127.0.0.1:18101:8080"
