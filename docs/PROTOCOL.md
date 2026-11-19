@@ -50,8 +50,38 @@ v1
 
 ## Test vector
 
-Use `pkg/agentsig/agentsig_test.go` as the reference. A cross-language conformance suite
-is planned for M1.
+One fixed request every implementation must reproduce. The same data is in
+`examples/signing/vector.json`, which the Go, Python, TypeScript and C# examples in
+`examples/signing/` check, and a Go test fails if the file drifts from `pkg/agentsig`.
+
+```text
+key id           dev-1
+secret           dev-secret
+timestamp        1767268800
+method           POST
+path and query   /api/v1/pets/feed?src=agent
+player           player-7
+idempotency key  idem-0001
+body             {"pet":"rex","food":"fish","amount":2}
+body sha256      2bf28910270739367847a8e121091f3b9851196ff3e2330ef0776071153ab377
+signature        a706e2b8923961ede4fc119424fe81125533df9ca469cdd5ec86663eefbba6de
+```
+
+The signed string for it, with `\n` as a real newline:
+
+```text
+v1
+1767268800
+dev-1
+POST
+/api/v1/pets/feed?src=agent
+player-7
+idem-0001
+2bf28910270739367847a8e121091f3b9851196ff3e2330ef0776071153ab377
+```
+
+`pkg/agentsig/agentsig_test.go` has more cases (skew, tampering, unknown key). The tutorial
+[Accept signed calls](tutorials/03-accept-signed-calls.md) shows a verifier in four languages.
 
 ## Studio requests: replay rule
 

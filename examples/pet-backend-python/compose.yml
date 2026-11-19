@@ -1,0 +1,32 @@
+# Gateway plus the python pet shop backend, ready to try.
+#   GW_PORT=8090 docker compose -f examples/pet-backend-python/compose.yml up --build
+#   curl -s -H 'X-Dev-Player: p1' http://127.0.0.1:${GW_PORT:-8090}/v1/tools
+# The gateway runs with --dev-auth (the player comes from a header) and in-memory stores:
+# local trying only. Ports bind to 127.0.0.1.
+name: pet-python
+
+services:
+  gateway:
+    build: { context: ../.., target: gateway }
+    command:
+      - --manifest=/etc/agentgw/manifest.json
+      - --backend-url=http://pet:9090
+      - --backend-allow-private   # the backend is on the compose network; dev only
+      - --addr=0.0.0.0:8080
+      - --dev-auth
+    environment:
+      - AGENTGW_SIGNING_SECRET=${AGENTGW_SIGNING_SECRET:-dev-secret}
+    volumes:
+      - ../pet-shop:/etc/agentgw:ro
+    ports:
+      - "127.0.0.1:${GW_PORT:-8090}:8080"
+    depends_on:
+      pet: { condition: service_started }
+
+  pet:
+    build: { context: ../.., dockerfile: examples/pet-backend-python/Dockerfile }
+    environment:
+      - AGENTGW_SIGNING_SECRET=${AGENTGW_SIGNING_SECRET:-dev-secret}
+      - BACKEND_ADDR=0.0.0.0:9090
+    ports:
+      - "127.0.0.1:${PET_PORT:-9190}:9090"   # so you can poke the backend directly; loopback only

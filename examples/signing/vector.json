@@ -1,0 +1,13 @@
+{
+  "key_id": "dev-1",
+  "secret": "dev-secret",
+  "timestamp": 1767268800,
+  "method": "POST",
+  "path": "/api/v1/pets/feed?src=agent",
+  "player": "player-7",
+  "idempotency_key": "idem-0001",
+  "body": "{\"pet\":\"rex\",\"food\":\"fish\",\"amount\":2}",
+  "body_sha256": "2bf28910270739367847a8e121091f3b9851196ff3e2330ef0776071153ab377",
+  "signed_string": "v1\n1767268800\ndev-1\nPOST\n/api/v1/pets/feed?src=agent\nplayer-7\nidem-0001\n2bf28910270739367847a8e121091f3b9851196ff3e2330ef0776071153ab377",
+  "signature": "a706e2b8923961ede4fc119424fe81125533df9ca469cdd5ec86663eefbba6de"
+}
