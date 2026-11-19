@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -19,7 +20,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/Moustafa-Elgammal/agentgw/internal/activity"
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
+	auditpg "github.com/Moustafa-Elgammal/agentgw/internal/audit/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/auth"
 	authpg "github.com/Moustafa-Elgammal/agentgw/internal/auth/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/confirm"
@@ -28,11 +31,32 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/gateway"
 	"github.com/Moustafa-Elgammal/agentgw/internal/httpapi"
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifest"
+	"github.com/Moustafa-Elgammal/agentgw/internal/manifeststore"
+	mspg "github.com/Moustafa-Elgammal/agentgw/internal/manifeststore/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/mcpserver"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy/redisstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/studiosig"
 )
+
+// auditPruneLoop deletes audit events older than the retention once an hour until ctx ends.
+func auditPruneLoop(ctx context.Context, log *slog.Logger, s audit.Store, retention time.Duration) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			n, err := s.Prune(ctx, time.Now().Add(-retention))
+			if err != nil {
+				log.Error("prune audit store", "err", err)
+				continue
+			}
+			log.Info("pruned audit store", "rows", n)
+		}
+	}
+}
 
 // pruneLoop removes expired OAuth rows once an hour until ctx ends.
 func pruneLoop(ctx context.Context, log *slog.Logger, s interface {
@@ -55,6 +79,59 @@ func pruneLoop(ctx context.Context, log *slog.Logger, s interface {
 	}
 }
 
+// syncLoop applies the store's active manifest every interval until ctx ends, so a rollback
+// on one replica reaches the others.
+func syncLoop(ctx context.Context, log *slog.Logger, m *manifeststore.Manager, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			if err := m.Sync(sctx); err != nil {
+				log.Error("manifest sync", "err", err)
+			}
+			cancel()
+		}
+	}
+}
+
+// reloadKeys loads the key set (the flag key plus the file's keys) into v and registers a
+// reload for SIGHUP. A failed reload keeps the keys in use and logs the error, so a typo in
+// the file never locks the studio out. It reports whether the first load worked.
+func reloadKeys(log *slog.Logger, v *studiosig.Verifier, id string, secret []byte, file string, reloaders *[]func()) bool {
+	load := func() error {
+		keys := map[string][]byte{}
+		if id != "" && len(secret) > 0 {
+			keys[id] = secret
+		}
+		if file != "" {
+			fk, err := studiosig.LoadKeys(file)
+			if err != nil {
+				return err
+			}
+			for k, sec := range fk {
+				keys[k] = sec
+			}
+		}
+		v.SetKeys(keys)
+		log.Info("studio keys loaded", "file", file, "count", len(keys)) // ids and secrets are never logged
+		return nil
+	}
+	if err := load(); err != nil {
+		log.Error("keys", "file", file, "err", err)
+		return false
+	}
+	*reloaders = append(*reloaders, func() {
+		if err := load(); err != nil {
+			log.Error("key reload failed, keeping current keys", "file", file, "err", err)
+		}
+	})
+	return true
+}
+
 func main() {
 	var (
 		manifestPath = flag.String("manifest", "", "path to the tool manifest (.json, or .yaml/.yml)")
@@ -69,9 +146,15 @@ func main() {
 		registerHour = flag.Int("register-per-hour", 10, "client registrations allowed per hour per client address (negative disables)")
 		maxClients   = flag.Int("max-clients", 10000, "most OAuth clients this process will register (negative disables)")
 		clientIPHdr  = flag.String("client-ip-header", "", "trusted header carrying the client address, for example X-Forwarded-For. Set it ONLY behind a proxy that overwrites it, or clients can evade rate limits")
+		studioKeys   = flag.String("studio-keys-file", "", "JSON file {\"key-id\":\"secret\"} of extra studio keys, for rotation. Reloaded on SIGHUP. Added to --studio-key-id")
+		auditKeep    = flag.Duration("audit-retention", 720*time.Hour, "how long audit events are kept for the activity feed (0 keeps them forever)")
+		adminKeys    = flag.String("admin-keys-file", "", "JSON file {\"key-id\":\"secret\"} of admin keys, for rotation. Reloaded on SIGHUP. Added to --admin-key-id")
+		adminKeyID   = flag.String("admin-key-id", "admin-1", "key id the studio uses to sign manifest calls (secret: AGENTGW_ADMIN_SECRET, must differ from the player key)")
+		manifestPoll = flag.Duration("manifest-poll", 15*time.Second, "how often to pick up a manifest version activated elsewhere (0 disables)")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	flag.Parse()
+	var reloaders []func()
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	ctx0, stopAll := context.WithCancel(context.Background()) // ends background loops on shutdown
 	defer stopAll()
@@ -108,6 +191,8 @@ func main() {
 	switches, _ := pol.(policy.Switchboard) // Memory and Redis both implement it
 	var confirmations confirm.Store = confirm.NewMemory(nil)
 	var authStore auth.Store = auth.NewMemory(nil)
+	var manifests manifeststore.Store = manifeststore.NewMemory(nil)
+	var auditStore audit.Store = &audit.Ring{}
 	if *postgresURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		pool, err := pgxpool.New(ctx, *postgresURL)
@@ -116,11 +201,20 @@ func main() {
 			if err = cs.Migrate(ctx); err == nil {
 				err = as.Migrate(ctx)
 			}
+			ms := mspg.New(pool, nil)
 			if err == nil {
-				confirmations, authStore = cs, as
+				err = ms.Migrate(ctx)
+			}
+			aus := auditpg.New(pool)
+			aus.OnError = func(err error) { log.Error("audit store write failed", "err", err) }
+			if err == nil {
+				err = aus.Migrate(ctx)
+			}
+			if err == nil {
+				confirmations, authStore, manifests, auditStore = cs, as, ms, aus
 				defer pool.Close()
 				go pruneLoop(ctx0, log, as)
-				log.Info("stores", "confirmations", "postgres", "auth", "postgres")
+				log.Info("stores", "confirmations", "postgres", "auth", "postgres", "manifests", "postgres", "audit", "postgres")
 			}
 		}
 		cancel()
@@ -134,8 +228,34 @@ func main() {
 	svc := gateway.New(m,
 		pol,
 		connector.NewHTTP(*backendURL, *keyID, []byte(secret)),
-		audit.Slog{L: log},
+		audit.Multi{audit.Slog{L: log}, auditStore},
 		gateway.WithConfirmations(confirmations))
+
+	if *auditKeep > 0 {
+		go auditPruneLoop(ctx0, log, auditStore, *auditKeep)
+	}
+
+	mgr := manifeststore.NewManager(manifests, *tenant, svc)
+	seedFmt := manifeststore.JSON
+	if ext := strings.ToLower(filepath.Ext(*manifestPath)); ext == ".yaml" || ext == ".yml" {
+		seedFmt = manifeststore.YAML
+	}
+	seed, err := os.ReadFile(*manifestPath)
+	if err != nil {
+		log.Error("manifest", "err", err)
+		os.Exit(1)
+	}
+	bctx, bcancel := context.WithTimeout(context.Background(), 10*time.Second)
+	av, seeded, err := mgr.Bootstrap(bctx, "bootstrap", seed, seedFmt)
+	bcancel()
+	if err != nil {
+		log.Error("manifest bootstrap", "err", err)
+		os.Exit(1)
+	}
+	log.Info("manifest", "version", av.ID, "sha256", av.SHA256, "seeded_from_file", seeded)
+	if *manifestPoll > 0 {
+		go syncLoop(ctx0, log, mgr, *manifestPoll)
+	}
 
 	mux := http.NewServeMux()
 	if *devAuth {
@@ -151,6 +271,9 @@ func main() {
 		// One replay cache for every studio-signed endpoint, so a captured request cannot be
 		// replayed against a different endpoint either.
 		sv := studiosig.New(studiosig.Config{KeyID: *studioKeyID, Secret: []byte(secret)})
+		if !reloadKeys(log, sv, *studioKeyID, []byte(secret), *studioKeys, &reloaders) {
+			os.Exit(1)
+		}
 		as := auth.NewServer(auth.ServerConfig{
 			Store: authStore, Issuer: issuer, Resource: rs.Resource, Tenant: *tenant,
 			StudioKeyID: *studioKeyID, StudioSecret: []byte(secret), Verifier: sv,
@@ -169,6 +292,20 @@ func main() {
 		studio := confirm.StudioHandler(confirm.StudioConfig{Store: confirmations, Tenant: *tenant, KeyID: *studioKeyID, Secret: []byte(secret), Verifier: sv})
 		mux.Handle("/v1/studio/confirmations", studio)
 		mux.Handle("/v1/studio/confirmations/", studio)
+		// The player's own activity feed: what their agents did, signed by the studio.
+		mux.Handle(activity.PlayerPath, activity.PlayerHandler(auditStore, *tenant, sv))
+		if adminSecret := os.Getenv("AGENTGW_ADMIN_SECRET"); adminSecret != "" || *adminKeys != "" {
+			av := studiosig.New(studiosig.Config{MaxBody: manifeststore.MaxUpload})
+			if !reloadKeys(log, av, *adminKeyID, []byte(adminSecret), *adminKeys, &reloaders) {
+				os.Exit(1)
+			}
+			mh := manifeststore.Handler(mgr, av)
+			mux.Handle("/v1/studio/manifest", mh)
+			mux.Handle("/v1/studio/manifest/", mh)
+			mux.Handle(activity.AdminPath, activity.AdminHandler(auditStore, *tenant, av))
+		} else {
+			log.Info("manifest endpoints not mounted", "reason", "neither AGENTGW_ADMIN_SECRET nor --admin-keys-file is set")
+		}
 		log.Info("oauth", "issuer", issuer, "resource", rs.Resource)
 	}
 
@@ -185,7 +322,16 @@ func main() {
 	}()
 
 	stop := make(chan os.Signal, 1)
+	hup := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			for _, r := range reloaders {
+				r()
+			}
+		}
+	}()
 	<-stop
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
