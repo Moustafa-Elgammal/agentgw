@@ -1,79 +1,32 @@
 # agentgw
 
-An open-source gateway that lets a player's own AI agent act safely inside a game.
+[![ci](https://github.com/Moustafa-Elgammal/agentgw/actions/workflows/ci.yml/badge.svg)](https://github.com/Moustafa-Elgammal/agentgw/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Moustafa-Elgammal/agentgw.svg)](https://pkg.go.dev/github.com/Moustafa-Elgammal/agentgw)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+**An open-source gateway that lets a player's own AI agent act safely inside a game.**
 
 A game studio describes its game actions in a manifest. The gateway turns them into
 [MCP](https://modelcontextprotocol.io) tools, applies safety policy (tiers, rate limits,
-daily caps, cooldowns, kill switches), calls the studio's backend with a signed request,
-and records every attempt in an audit log. It works with any backend language, because
-the contract is a manifest plus a signed HTTP request, not a library.
-
-**Status: M0 to M2 and M4 done, M3 nearly done.** The core pipeline, MCP transport, Redis
-and Postgres stores and player confirmations work and are tested. Players link their agent with
-OAuth (M3, see below). A studio can upload and roll back its manifest and rotate its signing keys
-without a restart, and read an activity feed of what agents did (M4). The one open M3 item is OIDC login at consent. The relay for client-authoritative games (M5) is built: tools with `backend: relay` go over the game client's WebSocket. See
-[docs/ROADMAP.md](docs/ROADMAP.md).
+daily caps, cooldowns, kill switches, player confirmations), calls the studio's backend with a
+signed request, and records every attempt in an audit log. It works with any backend language,
+because the contract is a manifest plus a signed HTTP request, not a library. Games whose logic
+runs in the client can use a WebSocket relay instead.
 
 ## Two modes for players
 
 - **Coach**: read-only. State, prices, advice.
 - **Operator**: limited actions on the player's behalf, inside caps the studio controls.
 
-## What works today
+## Quickstart
 
-| Piece | Where |
-|---|---|
-| Manifest loader and validator, JSON or YAML (strict, reports all problems at once) | `internal/manifest` |
-| Policy: rate limit counted before validation, daily caps with reserve/settle, cooldowns, disabled sensitive tier | `internal/policy` |
-| Request signing (HMAC-SHA256, timestamp, idempotency key), usable by Go backends | `pkg/agentsig` |
-| REST connector (level 0) with path, query and JSON body mapping | `internal/connector` |
-| Audit events with hashed arguments | `internal/audit` |
-| Call pipeline: lookup, admit, validate, reserve, call, settle, audit | `internal/gateway` |
-| Dev HTTP API around the pipeline | `internal/httpapi`, `cmd/gateway` |
-| Player confirmations for tools marked `confirm` (approve or deny, single use, memory or Postgres) | `internal/confirm`, `internal/confirm/pgstore` |
-| Policy store in Redis (shared across replicas, fails closed) and kill switches | `internal/policy/redisstore`, `internal/policy` |
-| MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
-| OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
-| Versioned manifests: upload, list, roll back, hot swap, replica sync (admin-signed, memory or Postgres) | `internal/manifeststore`, `internal/manifeststore/pgstore` |
-| Studio key rotation: key sets, key files, reload on SIGHUP | `internal/studiosig` |
-| Activity feed: what a player's agents did, player and admin views, retention (memory or Postgres) | `internal/activity`, `internal/audit/pgstore` |
-| Manifest CLI | `cmd/gwctl` |
-
-Not yet: OIDC login at consent. Set `--postgres-url` to
-keep clients, grants and approvals across restarts.
-With `--dev-auth` (the compose demo) the dev HTTP API and the MCP endpoint take the player from a
-header and must stay on loopback.
-
-## OAuth flow
-
-Without `--dev-auth`, `/mcp` needs a bearer token. An MCP client discovers everything itself:
-
-1. `GET /.well-known/oauth-protected-resource/mcp`, then `/.well-known/oauth-authorization-server`.
-2. `POST /register` (dynamic client registration), then `GET /authorize` with PKCE S256 and `resource=<public-url>/mcp`.
-3. The player is on the studio's site, logged in. The studio backend calls
-   `POST /v1/studio/link-tickets` signed with `agentsig` (player in `X-AG-Player`) and shows the
-   player a short code. The player types it on the consent page and picks **coach** or **operator**.
-4. The client exchanges the code at `POST /token`, then refreshes with rotation.
-
-The game's own UI uses signed studio endpoints for the player's side: list and revoke linked
-agents (`/v1/studio/grants`) and approve or deny a pending confirmation
-(`/v1/studio/confirmations`). The studio's own tooling manages the manifest through
-`/v1/studio/manifest`, signed with a separate admin key. See `docs/PROTOCOL.md`.
-
-Flags: `--public-url` (issuer, default `http://127.0.0.1:8080`), `--studio-key-id` (secret is
-`AGENTGW_SIGNING_SECRET`), `--studio-keys-file` and `--admin-keys-file` (extra keys for rotation,
-reloaded on SIGHUP), `--admin-key-id` (secret is `AGENTGW_ADMIN_SECRET`), `--manifest-poll`
-(how often replicas pick up a manifest change, default 15s), `--register-per-hour`, `--max-clients`, `--client-ip-header`, `--ops-addr` (loopback `/healthz`, `/readyz`, `/metrics`, default `127.0.0.1:9090`). The scripted end to end test is `test/conformance/auth_test.go`.
-Grants live in memory for now, so restarting the gateway makes players link again.
-
-## Try it
-
-Everything runs in containers. You only need Docker with Compose v2.
+You only need Docker with Compose v2. Nothing is installed on your machine.
 
 ```bash
-docker compose run --rm dev make test        # tests with the race detector
-docker compose up --build                    # gateway + Redis + Postgres + fake city backend
+git clone https://github.com/Moustafa-Elgammal/agentgw && cd agentgw
+docker compose up --build        # gateway, Redis, Postgres and a fake city backend on 127.0.0.1:8080
 
+# in another terminal: let a player "sell" some food through the gateway
 curl -s -X POST -H 'X-Dev-Player: p1' \
   -d '{"arguments":{"resource":"food","quantity":50}}' \
   http://127.0.0.1:8080/v1/tools/sell_resource/call
@@ -81,29 +34,39 @@ curl -s -X POST -H 'X-Dev-Player: p1' \
 docker compose down
 ```
 
-Other commands: `docker compose run --rm dev make vet fmt lint vuln`, or the shortcuts
-`make docker-test`, `make docker-lint`. Expected failures come back as results with a
-machine-readable `code` and a hint, for example `invalid_arguments`, `rate_limited`,
-`daily_amount_cap`, `cooldown`, `switched_off`. The agent can read them and correct itself.
+An expected failure comes back as a result with a machine-readable `code` and a hint, for
+example `invalid_arguments`, `rate_limited`, `daily_amount_cap`, `cooldown` or `switched_off`.
+The agent can read it and correct itself. The demo runs with `--dev-auth`, which trusts a
+header and must stay on loopback. Real deployments use OAuth (see the docs).
 
-## Use the gateway from Claude Desktop (stdio bridge)
+Run the tests: `docker compose run --rm dev make test`. To connect Claude Desktop, see
+[docs/CLAUDE-DESKTOP.md](docs/CLAUDE-DESKTOP.md).
 
-Claude Desktop launches local stdio MCP servers and cannot reach an `http://localhost`
-connector. `gwbridge` closes that gap: it speaks MCP over stdio to the client and forwards
-every tool list and tool call to the gateway's `/mcp` endpoint. It holds no policy, so limits,
-scopes and audit stay in the gateway. Build it with `docker compose build bridge`
-(image `agentgw-bridge:latest`), then add this to `claude_desktop_config.json` (use the
-absolute docker path):
+## Status and compatibility
 
-```json
-{"mcpServers":{"tinycity":{"command":"/usr/local/bin/docker","args":["run","-i","--rm","agentgw-bridge:latest","--url","http://host.docker.internal:8081/mcp","--header","X-Dev-Player: desktop"]}}}
-```
+Version `0.x`. The pipeline, MCP endpoint, OAuth 2.1, Redis and Postgres stores, confirmations,
+manifest upload and rollback, activity feed, relay, metrics, and a Helm chart are built and
+tested. Open items: OIDC login at consent, a hosted offering, and the docs site and guides
+(see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
-`--header "Name: value"` is repeatable and `--timeout` sets the upstream HTTP timeout. Sending
-`X-Dev-Player` only works against a gateway started with `--dev-auth` and is for local testing
-only. Real deployments pass a bearer token, for example `--header "Authorization: Bearer <token>"`.
-If the gateway cannot be reached, or answers 401, the bridge exits or reports the problem on
-stderr (stdout carries the protocol and is never used for logs).
+While the version is `0.x`, the manifest format, the signed request and some protocol details
+may still change. Every such change is recorded in [docs/DECISIONS.md](docs/DECISIONS.md) and
+the [CHANGELOG](CHANGELOG.md). Pin a version if you build on it.
+
+## Features
+
+- Manifest (JSON or YAML) becomes MCP tools. Strict validation reports every problem at once.
+- Policy: rate limits counted before validation, daily caps with reserve and settle, cooldowns,
+  tiers, kill switches. Policy outages fail closed.
+- Signed backend calls (HMAC-SHA256, timestamp, idempotency key). Go backends can import
+  [`pkg/agentsig`](pkg/agentsig); other languages follow [docs/PROTOCOL.md](docs/PROTOCOL.md).
+- Player confirmations for sensitive tools, linked through an embedded OAuth 2.1 server.
+- Versioned manifests with upload, rollback and hot swap, no restart. Key rotation.
+- Activity feed for players and studios. Audit stores hashes of arguments, never the arguments.
+- Relay for client-authoritative games, across several gateway replicas.
+- Metrics, health checks, an SSRF-safe connector, a Helm chart and a runbook.
+
+The full component list is in [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Design rules
 
@@ -116,15 +79,23 @@ stderr (stdout carries the protocol and is never used for logs).
 
 ## Docs
 
-- [Architecture](docs/ARCHITECTURE.md)
+- [Architecture](docs/ARCHITECTURE.md) and [features](docs/FEATURES.md)
 - [Manifest](docs/MANIFEST.md)
 - [Signed request protocol](docs/PROTOCOL.md)
 - [Security model](docs/SECURITY-MODEL.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Open source release, docs site and guides plan](docs/OPEN-SOURCE-PLAN.md)
-- [Open decisions](docs/DECISIONS.md)
+- [Runbook](docs/RUNBOOK.md) and [releasing](docs/RELEASING.md)
+- [Roadmap](docs/ROADMAP.md), [decisions](docs/DECISIONS.md), [open source plan](docs/OPEN-SOURCE-PLAN.md)
+
+## Contributing and security
+
+Small, focused pull requests are easiest to review. Every commit is signed off (DCO). Read
+[CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Report vulnerabilities privately,
+see [SECURITY.md](SECURITY.md).
+
+This is an independent project. It contains no code, data or API details from any employer or
+real game. The example game is fictional.
 
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Contributions are accepted under
-the Developer Certificate of Origin; see [CONTRIBUTING.md](CONTRIBUTING.md).
+the Developer Certificate of Origin.

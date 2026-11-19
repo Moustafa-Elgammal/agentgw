@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -176,7 +177,12 @@ func main() {
 		opsAddr      = flag.String("ops-addr", "127.0.0.1:9090", "listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables)")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 	var reloaders []func()
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	ctx0, stopAll := context.WithCancel(context.Background()) // ends background loops on shutdown

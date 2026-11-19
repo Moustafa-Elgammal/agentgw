@@ -18,6 +18,9 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/bridge"
 )
 
+// version is set at release time with -ldflags "-X main.version=...".
+var version = "dev"
+
 type headerFlags []string
 
 func (h *headerFlags) String() string     { return fmt.Sprint(*h) }
@@ -28,7 +31,12 @@ func main() {
 	var hdrs headerFlags
 	flag.Var(&hdrs, "header", "extra upstream request header \"Name: value\" (repeatable)")
 	timeout := flag.Duration("timeout", 30*time.Second, "timeout for each upstream HTTP request")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 	if *url == "" {
 		fmt.Fprintln(os.Stderr, "gwbridge: --url is required")
 		flag.Usage()

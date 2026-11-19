@@ -1,4 +1,4 @@
-.PHONY: all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check
+.PHONY: all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses
 
 all: fmt vet test build
 
@@ -66,3 +66,16 @@ helm-check:
 deploy-check: helm-check
 	docker compose run --rm promtool check rules /deploy/prometheus/alerts.yaml
 	docker compose run --rm dev python3 -m json.tool deploy/grafana/agentgw.json > /dev/null
+
+licenses:
+	docker compose run --rm licenses
+
+# Release and workflow checks, in containers (no host install). dist/ is gitignored.
+release-check:
+	docker compose run --rm release check
+
+release-snapshot:
+	docker compose run --rm release release --snapshot --clean --skip=publish,sign,sbom
+
+workflows-check:
+	docker compose run --rm actionlint

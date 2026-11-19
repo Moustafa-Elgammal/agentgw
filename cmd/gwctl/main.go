@@ -8,7 +8,8 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifest"
 )
 
-const version = "0.0.0-m0"
+// version is set at release time with -ldflags "-X main.version=...".
+var version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -16,7 +17,7 @@ func main() {
 		os.Exit(2)
 	}
 	switch os.Args[1] {
-	case "version":
+	case "version", "--version", "-version":
 		fmt.Println(version)
 	case "validate":
 		if len(os.Args) != 3 {

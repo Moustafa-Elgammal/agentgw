@@ -1,0 +1,74 @@
+# GoReleaser v2. Binaries, archives, checksums, archive SBOMs and keyless signatures.
+# Images are built by the release workflow (Dockerfile targets), not here.
+version: 2
+project_name: agentgw
+
+before:
+  hooks:
+    - go mod verify
+
+builds:
+  - id: gateway
+    main: ./cmd/gateway
+    binary: gateway
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+  - id: gwctl
+    main: ./cmd/gwctl
+    binary: gwctl
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+  - id: gwbridge
+    main: ./cmd/gwbridge
+    binary: gwbridge
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.version={{.Version}}"]
+
+archives:
+  - id: agentgw
+    formats: [tar.gz]
+    name_template: "agentgw_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - NOTICE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - artifacts: archive
+    documents: ["${artifact}.spdx.json"]
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args: ["sign-blob", "--yes", "--output-signature=${signature}", "--output-certificate=${certificate}", "${artifact}"]
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge "
+
+release:
+  prerelease: auto
+  draft: false

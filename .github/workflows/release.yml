@@ -1,0 +1,139 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 2s --health-timeout 2s --health-retries 15
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: agentgw
+          POSTGRES_PASSWORD: agentgw-dev
+          POSTGRES_DB: agentgw
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U agentgw -d agentgw" --health-interval 2s --health-timeout 2s --health-retries 20
+    env:
+      AGENTGW_TEST_REDIS_ADDR: 127.0.0.1:6379
+      AGENTGW_TEST_POSTGRES_URL: postgres://agentgw:agentgw-dev@127.0.0.1:5432/agentgw?sslmode=disable
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release and attach files
+      packages: write # push images to GHCR
+      id-token: write # keyless cosign signing and attestations
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+      - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      - name: Binaries, checksums, archive SBOMs and signatures
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-checksums: dist/checksums.txt
+
+      - id: meta-agentgw
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/moustafa-elgammal/agentgw
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - id: push-agentgw
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: gateway
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta-agentgw.outputs.tags }}
+          labels: ${{ steps.meta-agentgw.outputs.labels }}
+      - name: Sign agentgw by digest
+        env:
+          DIGEST: ${{ steps.push-agentgw.outputs.digest }}
+        run: cosign sign --yes "ghcr.io/moustafa-elgammal/agentgw@$DIGEST"
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ghcr.io/moustafa-elgammal/agentgw
+          subject-digest: ${{ steps.push-agentgw.outputs.digest }}
+          push-to-registry: true
+      - name: SBOM for agentgw
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ghcr.io/moustafa-elgammal/agentgw@${{ steps.push-agentgw.outputs.digest }}
+          format: spdx-json
+          output-file: agentgw-image.spdx.json
+          upload-release-assets: true
+
+      - id: meta-agentgw-bridge
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/moustafa-elgammal/agentgw-bridge
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - id: push-agentgw-bridge
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          target: bridge
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta-agentgw-bridge.outputs.tags }}
+          labels: ${{ steps.meta-agentgw-bridge.outputs.labels }}
+      - name: Sign agentgw-bridge by digest
+        env:
+          DIGEST: ${{ steps.push-agentgw-bridge.outputs.digest }}
+        run: cosign sign --yes "ghcr.io/moustafa-elgammal/agentgw-bridge@$DIGEST"
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ghcr.io/moustafa-elgammal/agentgw-bridge
+          subject-digest: ${{ steps.push-agentgw-bridge.outputs.digest }}
+          push-to-registry: true
+      - name: SBOM for agentgw-bridge
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ghcr.io/moustafa-elgammal/agentgw-bridge@${{ steps.push-agentgw-bridge.outputs.digest }}
+          format: spdx-json
+          output-file: agentgw-bridge-image.spdx.json
+          upload-release-assets: true

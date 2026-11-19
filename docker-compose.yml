@@ -21,6 +21,18 @@ services:
       redis: { condition: service_healthy }
       postgres: { condition: service_healthy }
 
+  # Regenerates docs/THIRD-PARTY-LICENSES.md and fails on a license outside the allowed set:
+  #   docker compose run --rm licenses
+  licenses:
+    image: golang:1.26-bookworm
+    profiles: [tools]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go-mod:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    entrypoint: ["sh", "scripts/licenses.sh"]
+
   # Shared policy store (rate limits, caps, cooldowns, kill switches). Not published to the host.
   redis:
     image: redis:7-alpine
@@ -105,6 +117,30 @@ services:
     entrypoint: ["promtool"]
     volumes:
       - ./deploy:/deploy:ro
+
+  # Release tooling, no host install. The snapshot build needs no tokens and publishes nothing:
+  #   docker compose run --rm release check
+  #   docker compose run --rm release release --snapshot --clean --skip=publish,sign,sbom
+  # (syft and cosign are not in this image, so the snapshot skips sbom and sign.)
+  release:
+    image: goreleaser/goreleaser:v2.20.2
+    profiles: [tools]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go-mod:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    environment:
+      - GOFLAGS=-buildvcs=false
+
+  #   docker compose run --rm actionlint
+  actionlint:
+    image: rhysd/actionlint:1.7.7
+    profiles: [tools]
+    working_dir: /repo
+    volumes:
+      - .:/repo:ro
+    entrypoint: ["actionlint", "-color"]
 
   # Build only: docker compose build bridge. Desktop clients launch it with docker run -i
   # (see README, "Use the gateway from Claude Desktop").

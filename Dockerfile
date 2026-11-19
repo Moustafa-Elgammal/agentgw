@@ -10,11 +10,12 @@ CMD ["bash"]
 
 # ---- build: static binaries ----
 FROM golang:${GO_VERSION}-bookworm AS build
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/... ./examples/city/backend
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /out/ ./cmd/... ./examples/city/backend
 
 # ---- gateway runtime ----
 FROM gcr.io/distroless/static-debian12:nonroot AS gateway
