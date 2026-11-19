@@ -543,6 +543,54 @@ Request body (`application/x-www-form-urlencoded`):
 | `401` | The link code did not work (HTML). |  |
 | `429` | Too many attempts (HTML). Retry-After says when. |  |
 
+### `POST /authorize/oidc`
+
+**Start sign-in with the studio's identity provider.** The consent page's "Sign in with your game account" button. The form carries the same authorization parameters as `POST /authorize` plus `scope_choice`. The gateway validates them, stores them in an encrypted session cookie, and redirects to the identity provider (authorization code with PKCE, `state` and `nonce`). Answers 404 when the gateway has no identity provider configured. See docs/design/oidc-consent.md.
+
+Auth: none.
+
+Request body (`application/x-www-form-urlencoded`): 
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `client_id` | string | yes |  |
+| `redirect_uri` | string | yes |  |
+| `response_type` | string | no |  |
+| `code_challenge` | string | yes |  |
+| `code_challenge_method` | string | yes |  |
+| `state` | string | no |  |
+| `resource` | string | no |  |
+| `scope` | string | no |  |
+| `scope_choice` | string | yes | `coach` or `operator`. |
+
+| Status | Meaning | Body |
+|---|---|---|
+| `303` | Redirect to the identity provider, with the session cookie set. |  |
+| `400` | The request is invalid (HTML). Nothing is redirected. |  |
+| `404` | No identity provider is configured. |  |
+| `429` | Too many attempts (HTML). Retry-After says when. |  |
+| `503` | The identity provider could not be reached (HTML). |  |
+
+### `GET /authorize/oidc/callback`
+
+**Where the identity provider sends the player back.** Register this URL, on the gateway's public address, as the redirect URI at the identity provider. It needs the session cookie set by `POST /authorize/oidc`, a matching `state`, and a code the gateway can exchange for an ID token that verifies (signature, issuer, audience, nonce, expiry). On success it records the grant for the player named by the configured claim and redirects to the client's redirect URI with a code. A failure after the session is known redirects there with `error`; a missing, expired or replayed session shows an error page and redirects nowhere.
+
+Auth: none.
+
+| Parameter | In | Type | Required | Meaning |
+|---|---|---|---|---|
+| `state` | query | string | yes |  |
+| `code` | query | string | no |  |
+| `error` | query | string | no | Set by the identity provider when the player refused. |
+| `iss` | query | string | no | RFC 9207 issuer, checked when present. |
+
+| Status | Meaning | Body |
+|---|---|---|
+| `303` | Redirect to the client's redirect URI with a code or an error. |  |
+| `400` | No trustworthy session: nothing is redirected (HTML). |  |
+| `404` | No identity provider is configured. |  |
+| `429` | Too many attempts. |  |
+
 ### `POST /token`
 
 **Exchange a code or refresh a token.** `authorization_code` exchanges the code with the PKCE verifier. `refresh_token` rotates the refresh token. Reusing a rotated refresh token revokes the grant. Access tokens are opaque.

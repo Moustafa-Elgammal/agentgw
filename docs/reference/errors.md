@@ -33,6 +33,7 @@ Expected failures of a tool call are normal results, not protocol errors: `ok` i
 | `backend_unavailable` | pipeline | The game could not be reached or answered 5xx. Nothing was changed and the reservation was released. | Try again later. |
 | `outcome_unknown` | pipeline | The call was cut off (cancelled or timed out) after it may have reached the game. It may or may not have happened. | Check the game state before repeating the call. |
 | `client_offline` | relay | A relay tool was called but the player's game client has no open socket. | Ask the player to open the game, then retry. |
+| `client_busy` | relay | The player's game client already has its limit of calls in flight (see --relay-max-in-flight), or it answered that it is busy. The call was not sent or not run. The message may say when to retry. | Wait a moment, then retry. Do not send many calls at once. |
 | `client_error` | relay | The game client answered a relay call with a failure and no code. | Read the message. Retry only if it makes sense. |
 | `bad_backend_data` | MCP server | The game answered with data the gateway could not read. | Try again later. Report it to the studio if it persists. |
 | `no_player` | dev API | The dev HTTP API needs the X-Dev-Player header. | Set the header. Dev only. |

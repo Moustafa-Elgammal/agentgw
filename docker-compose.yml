@@ -188,6 +188,34 @@ services:
     # Copied to /tmp so the read-only source tree stays clean.
     command: ["sh", "-c", "cp -r /s /tmp/s && cd /tmp/s/csharp && dotnet run"]
 
+  # C# relay client for Unity games. Tests run against an in-process fake gateway:
+  #   docker compose run --rm unity-client-test
+  # The console sample game (needs a gateway with a relay ticket, see its README):
+  #   docker compose run --rm unity-client-sample
+  unity-client-test:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    profiles: [tools]
+    environment:
+      - DOTNET_NOLOGO=1
+      - DOTNET_CLI_TELEMETRY_OPTOUT=1
+    volumes:
+      - ./examples/unity-relay-client:/s:ro
+    # Copied to /tmp so the read-only source tree stays clean.
+    command: ["sh", "-c", "cp -r /s /tmp/s && cd /tmp/s/tests && dotnet run -c Release"]
+
+  unity-client-sample:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    profiles: [tools]
+    environment:
+      - DOTNET_NOLOGO=1
+      - DOTNET_CLI_TELEMETRY_OPTOUT=1
+      - RELAY_URL
+      - RELAY_TICKET
+      - TICKET_URL
+    volumes:
+      - ./examples/unity-relay-client:/s:ro
+    command: ["sh", "-c", "cp -r /s /tmp/s && cd /tmp/s/sample && dotnet run -c Release"]
+
   #   docker compose run --rm actionlint
   actionlint:
     image: rhysd/actionlint:1.7.7

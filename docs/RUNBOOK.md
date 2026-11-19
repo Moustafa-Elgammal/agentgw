@@ -41,15 +41,19 @@ Flags (all in `cmd/gateway/main.go`; `gateway --help` prints them):
 | `--key-id` | `dev-1` | key id the gateway sends when it signs backend calls |
 | `--addr` | `127.0.0.1:8080` | public listener. Use `0.0.0.0:8080` in a container |
 | `--ops-addr` | `127.0.0.1:9090` | `/healthz`, `/readyz`, `/metrics`. Never expose it publicly. Empty disables it |
+| `--postgres-max-conns` | driver default | Most Postgres connections the shared pool opens. 0 keeps the pgx default, the larger of 4 and the CPU count, or the URL's `pool_max_conns`. The effective value is logged at start (`postgres pool`) and exposed as `agentgw_pgx_pool_max_conns` |
+| `--postgres-min-conns` | 0 | Connections the pool keeps open when idle (0 keeps none) |
 | `--public-url` | `http://127.0.0.1:8080` | OAuth issuer; the MCP resource is `<public-url>/mcp` |
 | `--tenant` | `dev` | tenant id |
 | `--dev-auth` | false | DEV ONLY. Trusts `X-Dev-Player`. Never on a reachable network |
 | `--studio-key-id` | `dev-1` | studio key id (player calls, grants, confirmations, activity, relay tickets) |
 | `--admin-key-id` | `admin-1` | admin key id (manifest endpoints, admin feed). Use a different secret than the studio key |
-| `--studio-keys-file`, `--admin-keys-file` | none | extra keys for rotation, reloaded on SIGHUP |
+| `--studio-keys-file`, `--admin-keys-file` | none | extra keys for rotation, reloaded on SIGHUP. With `--studio-keys-only` or `--admin-keys-only` they are the only keys, and the key from the flag and environment is retired |
+| `--backend-key-file` | none | `{"id","secret"}` of the key that signs calls to the backend, reloaded on SIGHUP |
 | `--redis-addr` | `$AGENTGW_REDIS_ADDR` | Redis address |
 | `--postgres-url` | `$AGENTGW_POSTGRES_URL` | Postgres URL |
 | `--audit-retention` | `720h` | audit events older than this are deleted hourly. `0` keeps them forever |
+| `--audit-queue`, `--audit-batch-size`, `--audit-flush-interval`, `--audit-overflow` | `0`, `500`, `200ms`, `drop` | batch audit writes (Postgres only). `--audit-queue` is the queue size in events, 0 writes each event before the call returns. See "Audit write path" below |
 | `--manifest-poll` | `15s` | how often a replica picks up a manifest activated elsewhere. `0` disables |
 | `--relay-ticket-ttl` | `60s` | relay ticket lifetime |
 | `--register-per-hour`, `--max-clients` | `10`, `10000` | OAuth client registration limits (per process) |
@@ -117,7 +121,9 @@ On the ops port:
 | `gateway_calls_total` | `tool`, `outcome` | calls; `outcome` is `ok` or the denial code |
 | `gateway_call_duration_seconds` | `tool` | histogram of whole-call latency |
 | `relay_connections` | none | sockets held by this replica |
-| `relay_calls_total` | `result` | `ok`, `denied`, `offline`, `error` |
+| `relay_calls_total` | `result` | `ok`, `denied`, `offline`, `busy`, `error` |
+| `relay_busy_total` | none | calls refused because a player's socket was at its in-flight limit |
+| `relay_socket_closes_total` | `reason` | `bye`, `flood`, `malformed`, `unsupported`, `ping`, `replaced`, `disconnected` |
 | `http_requests_total` | `route`, `code` | public listener requests by route pattern |
 | `agentgw_build_info` | `version` | always 1 |
 
@@ -125,6 +131,26 @@ On the ops port:
 `outcome_unknown` (the call was cut off and may or may not have happened), `policy_unavailable`
 and `confirmation_unavailable`. Everything else that is not `ok` is a normal denial (rate limit,
 cap, cooldown, validation, scope, kill switch).
+
+## Connection pools and runtime metrics
+
+`/metrics` also carries the numbers that explain slow or leaking behavior from the inside. They are read at scrape time, so a value is never older than the scrape.
+
+| Metric | Meaning |
+|---|---|
+| `agentgw_pgx_pool_acquired_conns`, `_idle_conns`, `_total_conns`, `_max_conns` | Postgres pool: in use, idle, open, and the cap |
+| `agentgw_pgx_pool_acquire_total`, `_empty_acquire_total`, `_canceled_acquire_total` | acquires, those that had to wait, those abandoned |
+| `agentgw_pgx_pool_acquire_duration_seconds_total` | time spent acquiring; its rate is seconds of waiting per second |
+| `agentgw_redis_pool_total_conns`, `_idle_conns`, `_hits_total`, `_misses_total`, `_timeouts_total` | Redis pool; rising timeouts mean it is too small |
+| `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_memstats_heap_inuse_bytes`, `go_memstats_sys_bytes` | Go runtime memory and goroutines |
+| `go_gc_cycles_total`, `go_gc_pause_seconds_total` | garbage collection |
+| `process_open_fds` | open file descriptors (Linux) |
+
+The Postgres pool opens connections as concurrency needs them, up to its cap, and keeps them. So
+the number of Postgres connections climbs under the first minutes of load and then stays level.
+That is a pool filling up, not a leak. A leak looks like `agentgw_pgx_pool_total_conns` above
+`agentgw_pgx_pool_max_conns`, which cannot happen, or connections from the database's side
+(`pg_stat_activity`) that keep rising past the sum of all replicas' caps.
 
 ## Pilot rollout: coach first
 
@@ -165,6 +191,8 @@ connections after 120 seconds idle.
 | 401 `invalid_client` on studio calls | wrong key or secret, clock skew over 5 minutes, replayed idempotency key | Fix the signing side; each request needs a fresh `Idempotency-Key` |
 | 413 `too_large` on a manifest upload | body over 1 MiB | Trim the manifest |
 | `rate_limited` rising | an agent is looping, or limits are too tight | Look at the activity feed for the player; consider a kill switch for the tool |
+| `AgentgwPostgresPoolSaturated`, slow audit or confirmation writes | every pooled Postgres connection is in use and callers wait | Look at the "Postgres pool" panels: `acquired` at the cap and a rising wait rate. Raise `--postgres-max-conns` (stay under the database's `max_connections`, counting every replica), look for slow queries in Postgres, or add a replica. Connections that level off at the cap are normal, not a leak |
+| `AgentgwGoroutinesGrowing` | a leak, or a dependency that stopped answering so work piles up | Check `relay_connections` and backend latency first. A steady climb with flat traffic is a leak: restart the replica and keep the heap and goroutine panels for the bug report |
 
 ## Secrets and key rotation
 
@@ -173,14 +201,38 @@ Rotation has no downtime. Both a studio key set and an admin key set are reloade
 1. Put both the old and the new key in the key file, for example
    `{"studio-1":"<old>","studio-2":"<new>"}` (file mode 0600, JSON object of id to secret).
 2. `kill -HUP <pid>` (Kubernetes: update the Secret, wait for the kubelet to refresh the mounted
-   file, then signal the pods; or roll the Deployment). The log shows `studio keys loaded` with a count, never the secrets.
-   A file that fails to parse is rejected and the current keys stay.
+   file, then signal the pods; or roll the Deployment). The log shows `studio keys loaded` with the key ids
+   added and removed, never the secrets. A file that fails to parse is rejected and the current keys stay.
 3. Switch the signing side to the new key id and secret.
 4. Remove the old key from the file and send SIGHUP again.
 
-The key from `--studio-key-id` plus `AGENTGW_SIGNING_SECRET` always stays valid, so a bad file
-never locks the studio out. To rotate that one, move to the file and remove it only by
-restarting with a new value. The same applies to the admin key and `AGENTGW_ADMIN_SECRET`.
+### Retiring the key from the environment
+
+By default the key from `--studio-key-id` plus `AGENTGW_SIGNING_SECRET` stays valid for the life of
+the process, so a bad file never locks the studio out. Start with `--studio-keys-only` (and
+`--admin-keys-only` for the admin key and `AGENTGW_ADMIN_SECRET`) and the file becomes the whole
+set: the environment key is not accepted, and removing a key from the file plus SIGHUP retires it
+with no restart. Both flags need their key file, and startup fails without it. A reload that would
+leave no keys is refused and the current keys stay.
+
+### The key that signs calls to your backend
+
+The gateway signs every call to your backend with `--key-id` and `AGENTGW_SIGNING_SECRET`. To rotate
+that key without a restart, point `--backend-key-file` at a JSON file `{"id":"...","secret":"..."}`.
+It is read at start and on SIGHUP, and a call already in flight finishes with the key it started
+with. Rotate in this order, because the backend has to learn the new key first:
+
+1. Make the backend accept both the old and the new key.
+2. Write the new key into the file, send SIGHUP, and look for `backend signing key loaded` with
+   `key_id` and `previous_key_id`.
+3. Remove the old key from the backend.
+
+A file with an empty id or secret, or one that does not parse, keeps the current key and logs
+`backend key reload failed`. With `--studio-keys-only` and `--backend-key-file` together,
+`AGENTGW_SIGNING_SECRET` is no longer needed.
+
+Every reload counts in `agentgw_key_reloads_total{kind,result}` (`kind` is `studio`, `admin` or
+`backend`; `result` is `ok` or `error`). Alert on a rising `error` count after a rotation.
 `AGENTGW_RELAY_SECRET` is read at start, so rotating it needs a restart of every replica (all replicas must share one value). Tickets minted before the restart stop working; open sockets drop with the restart and clients reconnect with a new ticket.
 
 ## Manifest upload and rollback
@@ -232,7 +284,12 @@ A rollback is also the quickest way to take a tool away from agents without a re
 | `client_offline` | no socket for that player on any replica. Check `relay_connections` and that all replicas share one Redis |
 | Calls time out (10 s) | the client connected but is not answering `call` frames with matching `id`; or a replica lost Redis pub/sub |
 | Socket closes with code 4000 | the same player connected again; the older one is replaced |
-| Socket closes with code 1008 | the client sent a frame that is not valid JSON |
+| Socket closes with code 1008 | the client sent a frame that is not valid JSON, a binary frame, or more than `--relay-max-frames-per-sec` frames a second (`relay_socket_closes_total{reason="malformed"}` or `"flood"`) |
+| Socket closes with code 1002 | the client's `hello` declared a major protocol version other than 1 (`reason="unsupported"`) |
+| Socket closes with code 1001 | the client stopped answering pings (`reason="ping"`); usually a game paused in the background or a dead network |
+| Many `client_busy` results | the game client answers slowly, so `--relay-max-in-flight` calls pile up. Check `relay_busy_total`; fix the client, or raise the flag |
+| A player reconnects in a loop | two clients for the same player keep replacing each other (code 4000). `relay_socket_closes_total{reason="replaced"}` climbs. Find the second client |
+| Flags | `--relay-max-in-flight` (default 8), `--relay-max-frames-per-sec` (default 100) |
 
 ## Redis and Postgres outages
 
@@ -255,6 +312,34 @@ A rollback is also the quickest way to take a tool away from agents without a re
 - `--audit-retention` (default 30 days) prunes `audit_events` hourly; the log line
   `pruned audit store` shows the row count. Keep a longer copy in your log pipeline if you need
   it, since the gateway also writes every audit event to stdout as JSON.
+
+## Audit write path
+
+By default each call writes its audit event to Postgres before the result is returned. That is the
+safest setting and the right one for a pilot under about 20 calls per second.
+
+For more volume, set `--audit-queue` (for example `--audit-queue=10000`). Events go on an in-process
+queue and one writer sends them to Postgres in batches (up to `--audit-batch-size` events, or after
+`--audit-flush-interval`, whichever comes first) with one `COPY`. The call never waits for the
+database. In a test, Postgres commits fell by a factor of about 400, so use it when Postgres is the
+thing you are protecting. See [design/audit-write-path.md](design/audit-write-path.md) for the numbers
+and the other options.
+
+What you give up, and how to see it:
+
+- **A crash or kill can lose queued events**, at most the queue size and normally no more than one
+  flush interval. A graceful stop (`SIGTERM`) writes the queue first, within 10 seconds.
+- **A full queue drops the event** (`--audit-overflow=drop`, the default) and counts it. With
+  `--audit-overflow=block` a call waits for room until its own 5 second deadline, then drops.
+- **A failed batch is lost**, not retried, and logged as `audit batch write failed`. Today's single
+  insert behaves the same way: audit never turns a good call into an error.
+- **The feed lags other replicas by up to one flush interval.** On the replica that took the call, the
+  feed flushes first, so it is current.
+- The stdout `agent_call` log line is unchanged and still written for every call. It is your second
+  copy of each event.
+
+Alert on any rate of `audit_dropped_total{reason}` and on `audit_flush_errors_total`. Watch
+`audit_queue_depth` (it should sit near zero) and `audit_flush_duration_seconds`.
 
 ## Upgrade
 

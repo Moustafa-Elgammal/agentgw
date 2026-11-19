@@ -79,8 +79,10 @@ header-trusting dev API is not mounted.
 - Uploads are validated before they are stored. Rollback validates again. A failure changes nothing.
 - Every version records the signed actor and a hash, so a change to what agents can call is attributable.
 - Studio and admin keys rotate without downtime: the verifier accepts a set of keys, loaded from
-  key files and reloaded on SIGHUP. A failed reload keeps the keys in use. Secrets and ids are
-  never logged. The replay cache survives a rotation.
+  key files and reloaded on SIGHUP. A failed reload keeps the keys in use. Secrets are never
+  logged; a reload logs the key ids added and removed. The replay cache survives a rotation.
+  With `--studio-keys-only` and `--admin-keys-only` the key from the environment is retired too, and
+  `--backend-key-file` rotates the key that signs calls to the backend, so no key needs a restart.
 
 ## Activity feed (M4)
 

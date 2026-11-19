@@ -258,21 +258,67 @@ A ticket lives 60 seconds, is signed with the relay secret and names tenant and 
 expired ticket gives `401 {"error":"invalid_ticket"}` before any upgrade. One socket per player:
 a new connection closes the old one with code 4000.
 
-**3. Frames.** JSON text frames, at most 1 MiB. Unknown `type` values are ignored; a frame that
-is not valid JSON closes the socket with code 1008.
+**3. Frames.** JSON text frames, at most 1 MiB. Unknown `type` values and unknown fields are
+ignored, so the protocol can grow.
 
 | Direction | Frame |
 |---|---|
-| gateway to client | `{"type":"hello","protocol":1}` once after connect |
-| gateway to client | `{"type":"call","id":"c1","tool":"build_structure","args":{"kind":"farm"},"idem":"...","player":"alice"}` |
+| gateway to client | `{"type":"hello","protocol":1,"minor":1,"call_timeout_ms":10000,"ping_interval_ms":20000,"max_in_flight":8,"max_frame":1048576}` once after connect |
+| client to gateway | `{"type":"hello","protocol":1,"minor":1,"client":"unity-relay 0.1","capabilities":[]}` optional reply |
+| gateway to client | `{"type":"call","id":"c1","tool":"build_structure","args":{"kind":"farm"},"idem":"...","player":"alice","deadline_ms":9800}` |
 | client to gateway | `{"type":"result","id":"c1","ok":true,"data":{...}}` |
-| client to gateway | `{"type":"result","id":"c1","ok":false,"code":"insufficient_funds","message":"..."}` |
+| client to gateway | `{"type":"result","id":"c1","ok":false,"code":"insufficient_funds","message":"...","retry_after_ms":2000}` |
+| client to gateway | `{"type":"bye","reason":"app quit"}` optional graceful close |
 
-The client answers each `call` with a `result` carrying the same `id`, within the call timeout
-(10 s). `idem` is stable across retries of one logical call; a game that applies state should
-deduplicate on it. A result for an unknown or expired id is dropped. If the player has no
-socket the agent sees `client_offline`. A timeout fails the call and releases its reservation.
+**Versions.** `protocol` is the major version (1) and `minor` the minor (1). Version 1.1 only adds
+fields and the two optional client frames, so a v1 client, which reads `protocol`, ignores what it
+does not know and never sends `hello` or `bye`, works unchanged. A client that declares a different
+major version in its `hello` is closed with code 1002. The client `hello` is optional and only
+informs: `client` (printable ASCII, at most 64 characters) appears in gateway debug logs, and
+`capabilities` is reserved. Only the first `hello` counts.
+
+**Calls.** The client answers each `call` with a `result` carrying the same `id`, before
+`deadline_ms` has passed. `deadline_ms` is how long the gateway will still wait, counted from the
+moment it sent the frame (a relative time, so client clocks do not matter). The default call
+timeout is 10 s. After the deadline the gateway has given up, the agent sees `outcome_unknown`, and a late
+result is dropped, so a client may stop work it has not started. A result for an unknown or expired id is
+dropped. A failed `result` should carry a `code`; without one the agent sees `client_error`.
+`retry_after_ms` (on a failed result only) says when a retry makes sense. The gateway clamps it to
+one hour and adds "retry after N ms" to the message the agent reads.
+
+**No retries, and what `idem` is.** The gateway sends each call once and never resends it, on the
+same socket or after a reconnect. `idem` is a fresh unique value for every call, the same one a REST
+backend would get in `X-AG-Idempotency-Key`. A well-behaved client still ignores a `call` whose `id`
+it has already handled on this socket, which costs nothing. A call that was in flight when the
+socket dropped has an unknown outcome: the agent is told `outcome_unknown` and decides what to do.
+It is never replayed after a reconnect.
+
+**Backpressure.** At most `max_in_flight` calls (default 8, `--relay-max-in-flight`) wait on one
+player's socket at a time. A call over that is not sent: the agent gets the denied result
+`client_busy` at once. A client that cannot take more work may answer a call with
+`{"ok":false,"code":"client_busy","retry_after_ms":1000}` instead. A client may send at most
+`--relay-max-frames-per-sec` frames per second (default 100, bursts of twice that); above it the
+socket is closed with 1008 "too many frames".
+
+**Closing.** To leave on purpose, answer the calls still running, then send `bye` and close. The
+gateway closes with 1000, and any call still waiting on the socket fails with an unknown outcome.
 The gateway pings every 20 s and closes a socket that stops answering.
+
+| Close code | Who | Meaning |
+|---|---|---|
+| 1000 | gateway | normal close after the client's `bye` |
+| 1001 | gateway | the client stopped answering pings |
+| 1002 | gateway | the client's `hello` declared a major version other than 1 |
+| 1008 | gateway | a frame that is not valid JSON, a binary frame, or too many frames per second |
+| 1009 | gateway | a frame over 1 MiB |
+| 4000 | gateway | the same player connected again (on this or another replica) and replaced this socket |
+
+**Reconnecting.** A closed socket is not resumed: open a new one. Fetch a fresh ticket from your
+backend every time, because tickets last 60 seconds and are checked before the upgrade. After 4000
+do not reconnect at once, the player has another client open. For every other close or failure,
+back off exponentially with jitter: wait a random time between 0 and `min(30 s, 1 s * 2^attempt)`,
+reset the attempt counter after a connection has lasted a minute, and never retry faster than once a
+second. While the socket is down, tool calls for this player answer `client_offline`.
 
 ## Activity feed
 
@@ -311,4 +357,9 @@ timestamp and tool, or by the hash if you can compute it. Gateways keep events f
 Studio and admin requests name their key in `X-AG-Key-Id`. The gateway accepts every key in its
 current set, so rotate without downtime: add the new key (key file plus SIGHUP), switch your
 backend to sign with it, then remove the old key. A request signed with a removed key gets
-`401 {"error":"invalid_client"}`.
+`401 {"error":"invalid_client"}`. The key from `--studio-key-id` and
+`AGENTGW_SIGNING_SECRET` is retired the same way with `--studio-keys-only` (see the runbook).
+
+The key on the gateway's own calls to your backend rotates in the other order: your backend must
+accept the new `X-AG-Key-Id` before the gateway switches to it (`--backend-key-file` plus SIGHUP),
+and you drop the old key afterwards.

@@ -20,3 +20,4 @@ site/src/content/docs/*
 .tutorial-tmp/
 /soak-results/
 .DS_Store
+/.unity-out/

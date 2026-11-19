@@ -13,8 +13,14 @@ The gateway server.
 | `--addr` | string | `127.0.0.1:8080` | listen address (keep it on loopback) |
 | `--admin-key-id` | string | `admin-1` | key id the studio uses to sign manifest calls (secret: AGENTGW_ADMIN_SECRET, must differ from the player key) |
 | `--admin-keys-file` | string | none | JSON file {"key-id":"secret"} of admin keys, for rotation. Reloaded on SIGHUP. Added to --admin-key-id |
+| `--admin-keys-only` | bool | false | accept only the keys in --admin-keys-file; the key from --admin-key-id and AGENTGW_ADMIN_SECRET is retired |
+| `--audit-batch-size` | int | 500 | most audit events in one batch write (with --audit-queue) |
+| `--audit-flush-interval` | duration | 200ms | longest an audit event waits for its batch (with --audit-queue) |
+| `--audit-overflow` | string | `drop` | when the audit queue is full: drop the event and count it, or block until the call's deadline (with --audit-queue) |
+| `--audit-queue` | int | 0 | queue audit events and write them in batches (needs --postgres-url). The value is the queue size in events; 0 writes each event before the call returns. A crash can lose queued events |
 | `--audit-retention` | duration | 720h | how long audit events are kept for the activity feed (0 keeps them forever) |
 | `--backend-allow-private` | bool | false | let the gateway call a backend on a loopback or private address (compose and cluster networks). Off by default: the connector refuses those addresses |
+| `--backend-key-file` | string | none | JSON file {"id":"...","secret":"..."} with the key that signs calls to the backend. Reloaded on SIGHUP. Replaces --key-id and AGENTGW_SIGNING_SECRET for backend calls |
 | `--backend-url` | string | none | base URL of the game backend |
 | `--client-ip-header` | string | none | trusted header carrying the client address, for example X-Forwarded-For. Set it ONLY behind a proxy that overwrites it, or clients can evade rate limits |
 | `--dev-auth` | bool | false | DEV ONLY: trust the X-Dev-Player header and serve the dev HTTP API instead of requiring OAuth tokens |
@@ -25,13 +31,18 @@ The gateway server.
 | `--max-clients` | int | 10000 | most OAuth clients this process will register (negative disables) |
 | `--max-scope` | string | from `AGENTGW_MAX_SCOPE` | the most any player may grant: coach (read only, recommended for a first pilot) or operator. Empty means operator |
 | `--ops-addr` | string | `127.0.0.1:9090` | listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables) |
+| `--postgres-max-conns` | int | 0 | most Postgres connections the pool opens (0 keeps the driver default, the larger of 4 and the CPU count; a pool_max_conns in the URL is used when this is 0) |
+| `--postgres-min-conns` | int | 0 | Postgres connections kept open when idle (0 keeps the driver default of none; a pool_min_conns in the URL is used when this is 0) |
 | `--postgres-url` | string | from `AGENTGW_POSTGRES_URL` | Postgres URL for player confirmations (default: in-memory, single process) |
 | `--public-url` | string | `http://127.0.0.1:8080` | public base URL of this gateway: the OAuth issuer, and the MCP resource is &lt;public-url&gt;/mcp |
 | `--redis-addr` | string | from `AGENTGW_REDIS_ADDR` | Redis address for the shared policy store (default: in-memory, single process) |
 | `--register-per-hour` | int | 10 | client registrations allowed per hour per client address (negative disables) |
+| `--relay-max-frames-per-sec` | int | 100 | frames per second one game client may send before its socket is closed (burst is twice this) |
+| `--relay-max-in-flight` | int | 8 | calls that may wait on one player's game client at once; more get the denied result client_busy |
 | `--relay-ticket-ttl` | duration | 60s | how long a relay ticket stays valid (secret: AGENTGW_RELAY_SECRET; unset disables the relay) |
 | `--studio-key-id` | string | `dev-1` | key id the studio backend uses to sign link ticket requests (secret: AGENTGW_SIGNING_SECRET) |
 | `--studio-keys-file` | string | none | JSON file {"key-id":"secret"} of extra studio keys, for rotation. Reloaded on SIGHUP. Added to --studio-key-id |
+| `--studio-keys-only` | bool | false | accept only the keys in --studio-keys-file; the key from --studio-key-id and AGENTGW_SIGNING_SECRET is retired, so it can be rotated with SIGHUP and no restart |
 | `--tenant` | string | `dev` | tenant id for the dev server |
 | `--version` | bool | false | print the version and exit |
 

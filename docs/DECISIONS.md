@@ -53,7 +53,7 @@ OIDC against the studio's identity provider.
 - **Link tickets.** The studio's backend mints a single-use ticket (5 minutes) for a logged-in
   player through a request signed like any other studio call (`agentsig`), and sends the player to
   the consent page with it. The ticket carries the player id.
-- **OIDC.** Added after the ticket flow, needs a dependency, decided when built.
+- **OIDC.** Added after the ticket flow. Proposed design and the dependency question: see "OIDC at consent (proposed)" below.
 - **Dev auth.** `X-Dev-Player` and `X-Dev-Admin` stay behind an explicit `--dev-auth` flag. Without
   it, requests need a valid bearer token.
 - **Tenants.** One tenant per gateway process in M3 (`--tenant`). Per-tenant tokens and keys come with M4.
@@ -283,6 +283,12 @@ admin key (`docs/PROTOCOL.md`).
 - **Retention.** `--audit-retention` (default 720h, `0` is forever), pruned hourly.
 - **A failed audit write never fails a call.** `Record` has no error return; the Postgres store
   reports failures through `OnError`, which the gateway logs.
+- **Batched writes are opt-in.** `--audit-queue N` puts events on a bounded queue and one writer
+  sends batches with `COPY`. One writer, not several, so ids keep the order the gateway recorded events.
+  Overflow drops and counts by default (a call never waits on audit); `block` waits only up to the
+  call's own deadline. A failed batch is counted as dropped, not retried, which matches a failed single
+  insert today. A crash loses what is queued, so the default stays synchronous. `Query` and `Prune`
+  flush first. Reasoning and measurements: `docs/design/audit-write-path.md`.
 - **Not yet.** No export, no streaming and no aggregate counts. They can come with the M6
   dashboards. With several replicas on Postgres ids are global; on the in memory Ring they are
   per process.
@@ -321,6 +327,35 @@ down that socket.
 - **Wire protocol v1** is JSON text frames: `hello`, `call` (gateway to client), `result` (client
   to gateway). Results are validated no more than the HTTP connector's are: the game is the
   authority, the gateway still limits what may be asked.
+
+### Relay v1.1
+
+Hardening for a Unity client. All additive: a v1 client works unchanged.
+
+- **Backward compatible by construction.** The hello still says `protocol: 1`. New fields
+  (`minor`, `call_timeout_ms`, `ping_interval_ms`, `max_in_flight`, `max_frame`, `deadline_ms`,
+  `retry_after_ms`) and the optional client `hello` and `bye` frames are ignored by clients that
+  do not know them. Only a client that declares another major version in its own hello is refused
+  (1002).
+- **Relative deadlines.** `deadline_ms` is time left at send, not a clock time, so a wrong client
+  clock cannot matter. Across replicas it is the caller's remaining wait when it published.
+- **A cap on calls in flight per socket** (`--relay-max-in-flight`, default 8) with the denied
+  result `client_busy`, instead of letting a slow client pile up work. Calls from other replicas
+  count too. An entry for a remote call expires with the caller's deadline (plus one second):
+  without that, a client that never answered would hold its slots forever, because the owning
+  replica never learns that a remote caller gave up. This was found by the slow-client test.
+- **Frame rate limit** (`--relay-max-frames-per-sec`, default 100, burst 2x) closes a flooding
+  client with 1008. A token bucket per socket, no new dependency.
+- **No retries.** The gateway never resends a call, so the client needs no replay protection
+  beyond ignoring a repeated call id. `idem` is a fresh per-call key, as for REST backends. After a
+  socket drop an in-flight call stays `outcome_unknown`; replaying it could apply an action twice.
+- **`bye`** is a courtesy: calls still waiting fail with an unknown outcome, so a client should
+  answer running calls first. The server does not send `bye`: close codes carry the reason.
+- **Metrics.** `relay_busy_total` and `relay_socket_closes_total{reason}` through an optional
+  second observer (`relay.ExtObserver`), so the existing `Observer` did not change.
+- **Reference client.** `examples/unity-relay-client` (C#, `System.Net.WebSockets`, no
+  dependencies). It is tested against the real gateway and a console game. It has not been run
+  inside Unity.
 
 ## Observability (M6)
 
@@ -468,3 +503,88 @@ loopback. The studio needs a real one for incidents.
   and that the bare 400s plain `curl` users hit come from a missing `Accept` header or an
   unsupported version, each with a clear one-line message. A wrapper would have refused calls the
   SDK accepts, so it was dropped and troubleshooting names the real causes.
+
+## Rotating the primary keys without a restart
+
+Until now the key from `--studio-key-id` and `AGENTGW_SIGNING_SECRET` stayed valid for studio
+verification for as long as the process lived, and the same secret signed the gateway's calls to the
+backend. Rotating it meant a restart. Three small additions remove that, all opt in, so nothing
+changes for a deployment that does not use them.
+
+- **`--studio-keys-only` and `--admin-keys-only`.** With the flag, the accepted keys are exactly the
+  ones in `--studio-keys-file` (or `--admin-keys-file`). The key named by the flag and the
+  environment secret is not accepted. The file is already reloaded on SIGHUP and already refuses an
+  empty set, so retiring the old key is "remove it from the file, send SIGHUP". The flag needs its
+  file (startup fails without it). Without the flag the old behaviour holds: the environment key is
+  always accepted. A flag was chosen over "a file replaces the environment key whenever it exists"
+  because that would silently change the meaning of existing deployments.
+- **`--backend-key-file`.** A JSON file `{"id":"...","secret":"..."}` holds the key that signs calls to
+  the backend. It is read at start and on SIGHUP. The connector keeps the key behind an atomic
+  pointer, so a call in flight finishes with the key it started with and the next call uses the new
+  one. A file that fails to parse or has an empty id or secret keeps the current key and logs the
+  error. The rotation order is: teach the backend both keys, switch the gateway, then drop the old
+  key from the backend. `AGENTGW_SIGNING_SECRET` is not needed when both `--studio-keys-only` and
+  `--backend-key-file` are set.
+- **Visibility.** A reload logs the key ids added and removed (never secrets) and counts as
+  `agentgw_key_reloads_total{kind,result}`, with `kind` one of `studio`, `admin`, `backend` and
+  `result` one of `ok` or `error`. A failed reload keeps the keys in use.
+
+`pkg/agentsig` is unchanged. The example backend (`examples/city/backend`) accepts a key file
+(`AGENTGW_SIGNING_KEYS_FILE`, JSON `{"id":"secret"}`, re-read when it changes) so it can verify the old
+and the new key during the overlap.
+
+## Pool and runtime metrics
+
+- **Postgres pool settings are flags.** `--postgres-max-conns` and `--postgres-min-conns` override
+  the URL's `pool_max_conns` and `pool_min_conns` when above 0. With neither, pgx decides: at most
+  the larger of 4 and the CPU count, none kept idle. The effective values are logged once at
+  start, because a pool that fills to its cap under load looks like a leak from outside.
+- **Collectors run at scrape time.** `obs.Registry.OnScrape` runs hooks before rendering, so pool and
+  runtime numbers are exact at the scrape and there is no ticker to keep in step. A counter mirrored from
+  another source uses `Counter.Set`, which ignores a lower value so the series never goes back.
+- **`obs` stays free of drivers.** It defines plain `PoolStats` and `RedisPoolStats` structs;
+  `cmd/gateway` fills them from pgxpool and go-redis. No new dependency.
+- **Go runtime names follow the Prometheus client where one exists.** GC pause time is
+  `go_gc_pause_seconds_total` (a counter) instead of the client's summary, because this registry has no
+  summaries.
+- **Two alerts.** `AgentgwPostgresPoolSaturated` needs the pool above 90% in use and calls
+  waiting for 5 minutes. `AgentgwGoroutinesGrowing` needs over 1000 goroutines and a steady climb.
+
+## OIDC at consent (proposed)
+
+Full design: [design/oidc-consent.md](design/oidc-consent.md).
+
+A studio can let players sign in with its own OIDC identity provider at the consent page, as an
+alternative to the link code. It is built behind an interface and dormant by default.
+
+- **Split on purpose.** The standard library part is built and tested: discovery, the
+  authorization redirect with PKCE, `state` and `nonce`, an AES-256-GCM sealed session cookie
+  (no server-side state), the code exchange, claim checks (issuer, audience, `azp`, nonce, expiry,
+  age), and the mapping from a configurable claim to the studio's player id. The signature check
+  of the ID token sits behind `oidc.Verifier`.
+- **Why a seam.** Verifying a signature against rotating keys is where hand-rolled code fails
+  (algorithm confusion, key selection, key size, JWKS cache). Which library, if any, is a
+  dependency decision, and the project rule is to ask first. `Flow` also re-checks every claim,
+  so a weak `Verifier` cannot skip the nonce, audience, issuer or expiry.
+- **Session in a cookie, not the store.** The auth `Store` interface is not extended. The sealed
+  cookie also binds the callback to the browser that started it (login CSRF). A replay cache per
+  process refuses a repeated callback quickly; the IdP's one-time code is the backstop across
+  replicas.
+- **Default behavior is unchanged.** `ServerConfig.OIDC` is nil unless set. The two new routes
+  are always registered (so the route list, spec and drift tests are the same for every
+  configuration) and answer 404 when it is nil.
+- **Fail closed.** Any failure ends without a grant. An untrustworthy session (no cookie,
+  tampered, expired, wrong state, replayed) redirects nowhere. Verification failures reach the
+  agent only as `access_denied`.
+- **Not decided yet:** the flags (`--oidc-issuer`, `--oidc-client-id`, `AGENTGW_OIDC_CLIENT_SECRET`,
+  `AGENTGW_OIDC_SESSION_SECRET`, `--oidc-player-claim`, `--oidc-scopes`) are not wired, so no flag
+  exists that does nothing.
+
+**Question for the maintainer: which signature verifier do we use?**
+
+1. **`go-oidc/v3` plus `go-jose/v4`** (recommended): two permissively licensed dependencies, used
+   only inside a small adapter. `golang.org/x/oauth2` is already an indirect dependency.
+2. **An in-house verifier** on the standard library: no dependency, about 300 to 400 lines of
+   security-critical code that only this project reviews.
+3. **No OIDC in the gateway**: studios that want SSO put an OIDC-aware proxy in front of their own
+   login page, which keeps minting link tickets as today.

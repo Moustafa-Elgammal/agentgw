@@ -9,6 +9,19 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ### Added
 
+- Optional batched audit writes: `--audit-queue`, `--audit-batch-size`, `--audit-flush-interval` and `--audit-overflow`. Events go on a bounded queue and one writer sends them with a single `COPY`, so a call no longer waits for Postgres and commits fall sharply. Off by default (queue 0 keeps the synchronous write). Queued events are lost on a crash and written on a graceful stop. New metrics: `audit_queue_depth`, `audit_dropped_total{reason}`, `audit_batch_size`, `audit_flush_duration_seconds`, `audit_flush_errors_total`. See `docs/design/audit-write-path.md`.
+- OIDC sign-in at the consent page, built behind an interface and off by default: `internal/auth/oidc` (flow, claim checks, sealed session cookie), `POST /authorize/oidc` and `GET /authorize/oidc/callback`. The ID token signature check and the flags wait for a dependency decision. See `docs/design/oidc-consent.md`.
+- Relay protocol v1.1 (backward compatible): the hello announces limits, calls carry
+  `deadline_ms`, results may carry `retry_after_ms`, clients may send `hello` and `bye`, at most
+  `--relay-max-in-flight` calls wait per socket (`client_busy`), and a client sending more than
+  `--relay-max-frames-per-sec` frames is closed. Metrics `relay_busy_total` and
+  `relay_socket_closes_total`.
+- `examples/unity-relay-client`, a dependency-free C# reference client with a console game and
+  a Unity package layout.
+
+- Rotate the primary keys without a restart: `--studio-keys-only` and `--admin-keys-only` retire the key from the environment, and `--backend-key-file` reloads the key that signs backend calls on SIGHUP. Reloads log the key ids added and removed and count in `agentgw_key_reloads_total{kind,result}`. The example backend accepts a key file (`AGENTGW_SIGNING_KEYS_FILE`).
+- `--postgres-max-conns` and `--postgres-min-conns` for the shared Postgres pool, and the effective pool settings logged at start.
+- Metrics for the Postgres and Redis pools (`agentgw_pgx_pool_*`, `agentgw_redis_pool_*`) and the Go runtime (`go_goroutines`, `go_memstats_*`, `go_gc_*`, `process_open_fds`), read at scrape time. New Grafana panels and the alerts `AgentgwPostgresPoolSaturated` and `AgentgwGoroutinesGrowing`.
 - Studio kill switch API: `GET`, `PUT` and `DELETE /v1/studio/switches`, signed with the admin key.
   A tool, a player or the whole game can be switched off and on without a restart. Every change is
   an audit event (`admin.switch.on`, `admin.switch.off`).
@@ -18,6 +31,11 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
   report coach, and stored operator grants act as coach until the cap is raised.
 - `--max-body`: request bodies are capped at the front door (1 MiB, 64 KiB for OAuth and studio
   endpoints) with a clean `413 {"error":"too_large"}`. Keep-alive connections close after 120 s idle.
+
+### Fixed
+
+- A relay client that never answered could hold slots for calls from other replicas forever; they
+  now expire with the caller's deadline.
 
 ### Changed
 

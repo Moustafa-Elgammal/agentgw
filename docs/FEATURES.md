@@ -20,17 +20,18 @@ What is built today and where it lives in the code. The roadmap is in [ROADMAP.m
 | OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
 | Versioned manifests: upload, list, roll back, hot swap, replica sync (admin-signed, memory or Postgres) | `internal/manifeststore`, `internal/manifeststore/pgstore` |
 | Studio key rotation: key sets, key files, reload on SIGHUP | `internal/studiosig` |
+| Optional batched audit writes: bounded queue, one `COPY` per batch, drop-and-count overflow, drained on shutdown (`--audit-queue`) | `internal/audit` (`Batcher`), `internal/audit/pgstore` |
 | Activity feed: what a player's agents did, player and admin views, retention (memory or Postgres) | `internal/activity`, `internal/audit/pgstore` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: OIDC login at consent. Set `--postgres-url` to
+Not yet: OIDC login at consent (the flow is built behind an interface and waits for a decision on the signature verifier; see [the design](design/oidc-consent.md)). Set `--postgres-url` to
 keep clients, grants and approvals across restarts.
 With `--dev-auth` (the compose demo) the dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.
 
 Pilot control: `--max-scope coach` makes the whole gateway read only whatever players granted, and `--max-body` caps request bodies at the front door.
 
-Also built: the relay for client-authoritative games (`internal/relay`, see [PROTOCOL.md](PROTOCOL.md)), metrics and health on a separate ops listener (`internal/obs`), an SSRF-safe connector, a Helm chart, a runbook and a load tool.
+Also built: the relay for client-authoritative games (`internal/relay`, protocol 1.1 with limits, deadlines and backpressure, see [PROTOCOL.md](PROTOCOL.md); a C# reference client for Unity in `examples/unity-relay-client`), metrics and health on a separate ops listener (`internal/obs`), an SSRF-safe connector, a Helm chart, a runbook and a load tool.
 
 ## OAuth flow
 

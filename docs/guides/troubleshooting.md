@@ -141,6 +141,13 @@ Order follows a call through the pipeline. Codes marked dev only come from the d
 - **Check:** The startup log `relay` shows `enabled=true`. `relay_connections` shows sockets per replica.
 - **Fix:** The player opens the game. Make sure the client got a ticket and connects with it. All replicas must share one Redis and one `AGENTGW_RELAY_SECRET`.
 
+### `client_busy`
+
+- **Symptom:** A relay tool is refused with "too many calls in flight", or the message says when to retry.
+- **Likely cause:** The player's game client already has `--relay-max-in-flight` calls waiting (default 8), or it answered `client_busy` itself because it cannot take more work.
+- **Check:** `relay_busy_total` counts refusals by this gateway. The client's own log shows if it answered busy.
+- **Fix:** The agent waits and retries, one call at a time. If a healthy game is refused often, answer calls faster in the client, or raise `--relay-max-in-flight`.
+
 ### `client_error`
 
 - **Symptom:** A relay tool failed and the message is from the client.
