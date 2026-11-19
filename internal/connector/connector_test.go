@@ -47,7 +47,7 @@ func TestPostIsSignedAndCarriesJSON(t *testing.T) {
 	})
 	defer srv.Close()
 
-	c := NewHTTP(srv.URL, "k1", secret)
+	c := NewHTTP(srv.URL, "k1", secret, AllowPrivate())
 	tool := core.Tool{Name: "sell", HTTP: core.HTTPBinding{Method: "POST", URL: "/api/sell"}}
 	res, err := c.Call(context.Background(), player, tool, map[string]any{"resource": "food", "quantity": 5}, "idem-1")
 	if err != nil || !res.OK || string(res.Data) != `{"earned":10}` {
@@ -64,7 +64,7 @@ func TestGetUsesPathPlaceholderAndQuery(t *testing.T) {
 	})
 	defer srv.Close()
 
-	c := NewHTTP(srv.URL, "k1", secret)
+	c := NewHTTP(srv.URL, "k1", secret, AllowPrivate())
 	tool := core.Tool{Name: "get_building", HTTP: core.HTTPBinding{Method: "GET", URL: "/api/buildings/{id}"}}
 	res, err := c.Call(context.Background(), player, tool, map[string]any{"id": 12, "verbose": true}, "i")
 	if err != nil || !res.OK {
@@ -79,7 +79,7 @@ func TestBackendStatusMapping(t *testing.T) {
 		_, _ = w.Write([]byte("nope"))
 	})
 	defer srv.Close()
-	c := NewHTTP(srv.URL, "k1", secret)
+	c := NewHTTP(srv.URL, "k1", secret, AllowPrivate())
 	tool := core.Tool{Name: "x", HTTP: core.HTTPBinding{Method: "POST", URL: "/a"}}
 
 	status = 422
@@ -97,7 +97,7 @@ func TestUnreachableBackendIsAnError(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	url := srv.URL
 	srv.Close()
-	c := NewHTTP(url, "k1", secret)
+	c := NewHTTP(url, "k1", secret, AllowPrivate())
 	tool := core.Tool{Name: "x", HTTP: core.HTTPBinding{Method: "GET", URL: "/a"}}
 	if _, err := c.Call(context.Background(), player, tool, nil, "i"); err == nil {
 		t.Fatal("expected error")

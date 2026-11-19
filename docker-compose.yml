@@ -56,8 +56,10 @@ services:
     command:
       - --manifest=/etc/agentgw/manifest.json
       - --backend-url=http://city-backend:9090
+      - --backend-allow-private   # the backend is on the compose network; dev only
       - --addr=0.0.0.0:8080
       - --redis-addr=redis:6379
+      - --ops-addr=0.0.0.0:9091   # /healthz /readyz /metrics, published on loopback only
       # Demo mode: trust the X-Dev-Player header and serve the dev API. To try real OAuth,
       # delete this line (the issuer defaults to http://127.0.0.1:8080; the studio signing
       # key id is --studio-key-id, secret AGENTGW_SIGNING_SECRET). See README, "OAuth flow".
@@ -69,10 +71,40 @@ services:
       - ./examples/city:/etc/agentgw:ro
     ports:
       - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9091:9091"
     depends_on:
       city-backend: { condition: service_started }
       redis: { condition: service_healthy }
       postgres: { condition: service_healthy }
+
+  # Load and soak driver (needs the gateway running with --dev-auth):
+  #   docker compose up -d --build gateway
+  #   docker compose run --rm load --url http://gateway:8080 --duration 30s --rate 200
+  load:
+    build: { context: ., target: dev }
+    profiles: [tools]
+    working_dir: /src
+    volumes:
+      - .:/src
+      - go-mod:/go/pkg/mod
+      - go-build:/root/.cache/go-build
+    entrypoint: ["go", "run", "./test/load"]
+
+  # Chart and monitoring checks, no host install:
+  #   docker compose run --rm helm lint /deploy/helm/agentgw
+  helm:
+    image: alpine/helm:3.16.4
+    profiles: [tools]
+    volumes:
+      - ./deploy:/deploy:ro
+
+  #   docker compose run --rm promtool check rules /deploy/prometheus/alerts.yaml
+  promtool:
+    image: prom/prometheus:v2.55.1
+    profiles: [tools]
+    entrypoint: ["promtool"]
+    volumes:
+      - ./deploy:/deploy:ro
 
   # Build only: docker compose build bridge. Desktop clients launch it with docker run -i
   # (see README, "Use the gateway from Claude Desktop").

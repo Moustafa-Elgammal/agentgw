@@ -34,6 +34,7 @@ import (
 	"github.com/Moustafa-Elgammal/agentgw/internal/manifeststore"
 	mspg "github.com/Moustafa-Elgammal/agentgw/internal/manifeststore/pgstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/mcpserver"
+	"github.com/Moustafa-Elgammal/agentgw/internal/obs"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy"
 	"github.com/Moustafa-Elgammal/agentgw/internal/policy/redisstore"
 	"github.com/Moustafa-Elgammal/agentgw/internal/relay"
@@ -105,6 +106,9 @@ func syncLoop(ctx context.Context, log *slog.Logger, m *manifeststore.Manager, e
 // the file never locks the studio out. It reports whether the first load worked.
 // mountRelay serves the game client's WebSocket and the studio's ticket endpoint when
 // AGENTGW_RELAY_SECRET is set. Without it relay tools answer client_offline.
+// version labels agentgw_build_info. Release builds set it with -ldflags "-X main.version=...".
+var version = "dev"
+
 func mountRelay(log *slog.Logger, mux *http.ServeMux, hub *relay.Hub, tenant string, sv *studiosig.Verifier, ttl time.Duration) {
 	rs := os.Getenv("AGENTGW_RELAY_SECRET")
 	if rs == "" {
@@ -152,6 +156,7 @@ func main() {
 	var (
 		manifestPath = flag.String("manifest", "", "path to the tool manifest (.json, or .yaml/.yml)")
 		backendURL   = flag.String("backend-url", "", "base URL of the game backend")
+		allowPrivate = flag.Bool("backend-allow-private", false, "let the gateway call a backend on a loopback or private address (compose and cluster networks). Off by default: the connector refuses those addresses")
 		keyID        = flag.String("key-id", "dev-1", "signing key id sent to the backend")
 		addr         = flag.String("addr", "127.0.0.1:8080", "listen address (keep it on loopback)")
 		tenant       = flag.String("tenant", "dev", "tenant id for the dev server")
@@ -168,6 +173,7 @@ func main() {
 		adminKeyID   = flag.String("admin-key-id", "admin-1", "key id the studio uses to sign manifest calls (secret: AGENTGW_ADMIN_SECRET, must differ from the player key)")
 		manifestPoll = flag.Duration("manifest-poll", 15*time.Second, "how often to pick up a manifest version activated elsewhere (0 disables)")
 		relayTTL     = flag.Duration("relay-ticket-ttl", 60*time.Second, "how long a relay ticket stays valid (secret: AGENTGW_RELAY_SECRET; unset disables the relay)")
+		opsAddr      = flag.String("ops-addr", "127.0.0.1:9090", "listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables)")
 		redisAddr    = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
 	)
 	flag.Parse()
@@ -189,6 +195,8 @@ func main() {
 
 	var pol policy.Policy = policy.NewMemory(policy.DefaultLimits, nil)
 	var relayBus relay.Bus = relay.NewMemory(nil)
+	metrics := obs.NewMetrics(version)
+	var ready []obs.Check
 	if *redisAddr != "" {
 		rdb := redis.NewClient(&redis.Options{Addr: *redisAddr})
 		defer func() { _ = rdb.Close() }()
@@ -202,6 +210,7 @@ func main() {
 		}
 		pol = rs
 		relayBus = redisbus.New(rdb, "agentgw:relay:")
+		ready = append(ready, obs.Check{Name: "redis", Fn: func(ctx context.Context) error { return rdb.Ping(ctx).Err() }})
 		log.Info("policy store", "kind", "redis", "addr", *redisAddr)
 	} else {
 		log.Warn("policy store", "kind", "memory", "note", "limits are per process and reset on restart")
@@ -232,6 +241,7 @@ func main() {
 			if err == nil {
 				confirmations, authStore, manifests, auditStore = cs, as, ms, aus
 				defer pool.Close()
+				ready = append(ready, obs.Check{Name: "postgres", Fn: pool.Ping})
 				go pruneLoop(ctx0, log, as)
 				log.Info("stores", "confirmations", "postgres", "auth", "postgres", "manifests", "postgres", "audit", "postgres")
 			}
@@ -244,16 +254,28 @@ func main() {
 	} else {
 		log.Warn("confirmation and auth stores", "kind", "memory", "note", "approvals, clients and grants are per process and lost on restart")
 	}
-	relayHub := relay.NewHub(relayBus)
+	relayHub := relay.NewHub(relayBus, relay.WithObserver(metrics))
 	if err := relayHub.Start(ctx0); err != nil {
 		log.Error("relay", "err", err)
 		os.Exit(1)
 	}
+	var connOpts []connector.Option
+	if *allowPrivate {
+		connOpts = append(connOpts, connector.AllowPrivate())
+		log.Warn("backend-allow-private is on", "note", "the gateway may call loopback and private addresses; use it only for a trusted backend host")
+	}
 	svc := gateway.New(m,
 		pol,
-		connector.Mux{HTTP: connector.NewHTTP(*backendURL, *keyID, []byte(secret)), Relay: relay.NewConnector(relayHub)},
+		connector.Mux{HTTP: connector.NewHTTP(*backendURL, *keyID, []byte(secret), connOpts...), Relay: relay.NewConnector(relayHub)},
 		audit.Multi{audit.Slog{L: log}, auditStore},
-		gateway.WithConfirmations(confirmations))
+		gateway.WithConfirmations(confirmations),
+		gateway.WithObserver(metrics))
+	ready = append(ready, obs.Check{Name: "manifest", Fn: func(context.Context) error {
+		if len(svc.Tools()) == 0 {
+			return errors.New("no tools loaded")
+		}
+		return nil
+	}})
 
 	if *auditKeep > 0 {
 		go auditPruneLoop(ctx0, log, auditStore, *auditKeep)
@@ -335,8 +357,22 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr: *addr, Handler: mux,
+		Addr: *addr, Handler: metrics.Middleware(mux),
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second,
+	}
+	if *opsAddr != "" {
+		ops := &http.Server{
+			Addr: *opsAddr, Handler: obs.Ops(metrics.Reg, ready...),
+			ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 10 * time.Second,
+		}
+		defer func() { _ = ops.Close() }()
+		go func() {
+			log.Info("ops listening", "addr", *opsAddr)
+			if err := ops.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("ops server", "err", err)
+				os.Exit(1)
+			}
+		}()
 	}
 	go func() {
 		log.Info("listening", "addr", *addr, "tools", len(m.Tools))

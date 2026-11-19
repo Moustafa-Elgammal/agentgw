@@ -62,7 +62,7 @@ func TestSetManifestConcurrentWithCalls(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{}`)) }))
 	defer srv.Close()
 	svc := New(m1, policy.NewMemory(policy.Limits{ActionsPerMinute: 1 << 20, ReadsPerMinute: 1 << 20}, nil),
-		connector.NewHTTP(srv.URL, "k1", secret), &audit.Memory{})
+		connector.NewHTTP(srv.URL, "k1", secret, connector.AllowPrivate()), &audit.Memory{})
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		wg.Add(1)

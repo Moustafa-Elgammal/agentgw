@@ -55,7 +55,7 @@ func newOAuthRig(t *testing.T) *oauthRig {
 	}
 	b := newBackend(t)
 	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil),
-		connector.NewHTTP(b.srv.URL, keyID, secret), &audit.Memory{})
+		connector.NewHTTP(b.srv.URL, keyID, secret, connector.AllowPrivate()), &audit.Memory{})
 
 	var h atomic.Value // the handler, set once the server URL is known
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -88,10 +88,45 @@ header-trusting dev API is not mounted.
   responses are `no-store`.
 - Events are deleted after `--audit-retention`. The in memory store holds only the newest 10000.
 
+## Backend calls and argument injection (M6)
+
+The connector sends signed requests to the studio's backend. Arguments come from an agent, so
+they are untrusted. What the gateway does:
+
+- **SSRF-safe dialer.** The connector refuses to connect to loopback, private (RFC 1918, unique
+  local), link-local (including the 169.254.169.254 metadata address), multicast, unspecified,
+  carrier-grade NAT and other special-purpose ranges. IPv4-mapped IPv6 forms are judged as the
+  IPv4 address. The check runs on the address being connected to, after DNS resolution, so DNS
+  rebinding cannot slip past it. The environment proxy is never used.
+  `--backend-allow-private` turns the check off for a backend on a private network (the compose
+  demo does). Keep it off in production unless the backend host is yours.
+- **No redirects.** A 3xx from the backend is not followed, so a signed request cannot be bounced
+  to another host. The call fails as a backend error.
+- **Path placeholders.** Values are percent encoded as one path segment. Empty, `.` and `..`
+  values are refused, because encoding leaves dots alone and they would move the request.
+- **Query and body.** Values are encoded or JSON encoded, never concatenated.
+- **Signed headers.** The player and call identifiers must be printable ASCII, 1 to 128 bytes.
+  Anything else is refused before signing, so CR, LF and NUL cannot reach a header.
+- **Argument checks.** Exactly one JSON object (extra data after it is refused), known
+  parameters only, integers compared as integers (no float rounding at the bounds), numbers
+  that do not fit are refused, strings are exact matches against enums and at most 4096 bytes.
+  A duplicate key resolves to the last value, and that value is the one validated and forwarded.
+
+| Threat | Control | Test |
+|---|---|---|
+| Agent makes the gateway call an internal service or the cloud metadata address | Dialer refuses blocked ranges, no redirects, no proxy | `internal/connector/ssrf_test.go` |
+| Argument rewrites the request path (`../`, `%2f`, `.`) | Segment encoding, dot and empty values refused | `internal/connector/inject_test.go` |
+| Argument adds query parameters or headers | Query encoding, identifier check before signing | `internal/connector/inject_test.go` |
+| Oversized, nested or odd JSON | Strict decode, string limit, integer range in int64 | `internal/gateway/validate_inject_test.go` |
+| Duplicate or trailing JSON that shows the validator one thing and the backend another | Extra data refused, last duplicate wins for both | `internal/gateway/validate_inject_test.go` |
+
+Not covered here: a limit on the size of the request body itself, which belongs to the front
+door (MCP and HTTP servers), and a circuit breaker per backend.
+
 ## Planned
 
-SSRF-safe dialer for connector URLs, tenant isolation with row-level security,
-envelope encryption for signing secrets, circuit breaker per backend.
+Tenant isolation with row-level security, envelope encryption for signing secrets, circuit
+breaker per backend.
 
 ## Reporting
 

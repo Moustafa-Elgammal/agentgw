@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agentgw.fullname" . }}
+  labels:
+    {{- include "agentgw.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - { name: http, port: {{ .Values.service.port }}, targetPort: http, protocol: TCP }
+  selector:
+    {{- include "agentgw.selectorLabels" . | nindent 4 }}
+---
+# Ops port (health and metrics) for scraping. Kept off the public Service and the Ingress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agentgw.fullname" . }}-ops
+  labels:
+    {{- include "agentgw.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ops
+spec:
+  type: ClusterIP
+  ports:
+    - { name: ops, port: {{ .Values.ops.port }}, targetPort: ops, protocol: TCP }
+  selector:
+    {{- include "agentgw.selectorLabels" . | nindent 4 }}

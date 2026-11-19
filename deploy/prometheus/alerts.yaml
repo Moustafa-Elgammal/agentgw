@@ -1,0 +1,87 @@
+# Prometheus alert rules for agentgw. Check them with:
+#   docker compose run --rm promtool check rules /deploy/prometheus/alerts.yaml
+#
+# "Failure" outcomes are the codes that mean the gateway or its dependencies failed, not that a
+# player was refused: backend_unavailable, outcome_unknown, policy_unavailable and
+# confirmation_unavailable. Rate limits, caps and validation denials are normal and are not alerted on.
+# Replica readiness uses kube-state-metrics; adjust the job and deployment matchers to your install.
+groups:
+  - name: agentgw
+    rules:
+      - alert: AgentgwHighFailureRate
+        expr: |
+          sum(rate(gateway_calls_total{outcome=~"backend_unavailable|outcome_unknown|policy_unavailable|confirmation_unavailable"}[5m]))
+            /
+          clamp_min(sum(rate(gateway_calls_total[5m])), 1e-9) > 0.05
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "More than 5% of tool calls fail on infrastructure"
+          description: "Failure share is {{ $value | humanizePercentage }}. Check the backend, Redis and Postgres. See docs/RUNBOOK.md, symptom table."
+
+      - alert: AgentgwBackendUnavailable
+        expr: sum(rate(gateway_calls_total{outcome="backend_unavailable"}[5m])) > 0.5
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: "The game backend is refusing or dropping signed calls"
+          description: "backend_unavailable is {{ $value | humanize }} per second. Players see denials, no state changed."
+
+      - alert: AgentgwPolicyStoreDown
+        expr: sum(rate(gateway_calls_total{outcome="policy_unavailable"}[2m])) > 0
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "The policy store (Redis) is unreachable, calls fail closed"
+          description: "Every call that needs a limit check is refused while this fires. See docs/RUNBOOK.md, Redis outage."
+
+      - alert: AgentgwHighLatencyP99
+        expr: histogram_quantile(0.99, sum by (le) (rate(gateway_call_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warn }
+        annotations:
+          summary: "p99 tool call latency above 1s"
+          description: "p99 is {{ $value | humanizeDuration }}. Usually a slow backend; the connector timeout is 10s."
+
+      - alert: AgentgwRelayOfflineSpike
+        expr: |
+          sum(rate(relay_calls_total{result="offline"}[5m]))
+            /
+          clamp_min(sum(rate(relay_calls_total[5m])), 1e-9) > 0.3
+          and sum(rate(relay_calls_total[5m])) > 0.1
+        for: 10m
+        labels: { severity: warn }
+        annotations:
+          summary: "Over 30% of relay calls find the player's game client offline"
+          description: "Check ticket minting by the studio backend, the relay secret, and the client reconnect logic."
+
+      - alert: AgentgwRelayNoConnections
+        expr: sum(relay_connections) == 0 and sum(rate(relay_calls_total[15m])) > 0
+        for: 5m
+        labels: { severity: warn }
+        annotations:
+          summary: "Relay calls are arriving but no game client is connected"
+
+      - alert: AgentgwReplicaDown
+        expr: up{job=~".*agentgw.*"} == 0
+        for: 3m
+        labels: { severity: page }
+        annotations:
+          summary: "An agentgw replica is not answering scrapes"
+          description: "{{ $labels.instance }} is down or its ops port is blocked."
+
+      - alert: AgentgwReplicasNotReady
+        expr: kube_deployment_status_replicas_unavailable{deployment=~".*agentgw.*"} > 0
+        for: 10m
+        labels: { severity: warn }
+        annotations:
+          summary: "{{ $value }} agentgw replicas are not ready"
+          description: "/readyz is failing. Look at the pod events and the gateway log."
+
+      - alert: AgentgwNoTraffic
+        expr: sum(rate(gateway_calls_total[15m])) == 0
+        for: 30m
+        labels: { severity: info }
+        annotations:
+          summary: "No tool calls for 30 minutes"
+          description: "May be normal off hours. If not, check the MCP endpoint and OAuth."

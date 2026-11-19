@@ -55,7 +55,7 @@ func setupConfirm(t *testing.T, store confirm.Store, opts ...Option) cfx {
 	if store != nil {
 		opts = append(opts, WithConfirmations(store))
 	}
-	svc := New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(srv.URL, "k1", secret), a, opts...)
+	svc := New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(srv.URL, "k1", secret, connector.AllowPrivate()), a, opts...)
 	mem, _ := store.(*confirm.Memory)
 	return cfx{svc, mem, a, hits, fail}
 }

@@ -27,7 +27,7 @@ func server(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(be.URL, "k", []byte("s")), &audit.Memory{})
+	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(be.URL, "k", []byte("s"), connector.AllowPrivate()), &audit.Memory{})
 	srv := httptest.NewServer(New(svc, Config{Tenant: "demo"}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -80,7 +80,7 @@ func TestConfirmationEndpoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := confirm.NewMemory(nil)
-	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(be.URL, "k", []byte("s")), &audit.Memory{}, gateway.WithConfirmations(store))
+	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil), connector.NewHTTP(be.URL, "k", []byte("s"), connector.AllowPrivate()), &audit.Memory{}, gateway.WithConfirmations(store))
 	srv := httptest.NewServer(New(svc, Config{Tenant: "demo", Confirmations: store}))
 	defer srv.Close()
 
@@ -139,7 +139,7 @@ func TestAdminSwitches(t *testing.T) {
 		t.Fatal(err)
 	}
 	pol := policy.NewMemory(policy.DefaultLimits, nil)
-	svc := gateway.New(m, pol, connector.NewHTTP(be.URL, "k", []byte("s")), &audit.Memory{})
+	svc := gateway.New(m, pol, connector.NewHTTP(be.URL, "k", []byte("s"), connector.AllowPrivate()), &audit.Memory{})
 	srv := httptest.NewServer(New(svc, Config{Tenant: "demo", Switches: pol}))
 	defer srv.Close()
 

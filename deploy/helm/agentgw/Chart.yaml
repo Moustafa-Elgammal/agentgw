@@ -1,0 +1,11 @@
+apiVersion: v2
+name: agentgw
+description: Gateway between a player's AI agent and a game backend (MCP tools, policy, signed calls, audit)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/Moustafa-Elgammal/agentgw
+sources:
+  - https://github.com/Moustafa-Elgammal/agentgw
+keywords: [mcp, gateway, games, agents]

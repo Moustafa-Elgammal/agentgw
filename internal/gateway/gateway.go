@@ -40,7 +40,18 @@ type Service struct {
 	conn    connector.Connector
 	audit   audit.Auditor
 	confirm confirm.Store // nil: tools that need confirmation fail closed
+	obs     Observer      // nil: no metrics
 }
+
+// Observer is told about every finished call. It must not block. tool is the manifest name,
+// or "unknown" when the name is not in the manifest (so it is safe as a metric label).
+// outcome is "ok" or the result's denial code.
+type Observer interface {
+	ObserveCall(tool, outcome string, d time.Duration)
+}
+
+// WithObserver reports every call to o. It does not change what a call does.
+func WithObserver(o Observer) Option { return func(s *Service) { s.obs = o } }
 
 // Option customizes a Service.
 type Option func(*Service)
@@ -84,6 +95,24 @@ func (s *Service) Tools() []core.Tool {
 // Call runs one tool call for a principal. It never returns a Go error for an
 // expected failure; those come back as a Result the agent can read.
 func (s *Service) Call(ctx context.Context, p core.Principal, name string, raw json.RawMessage) core.Result {
+	if s.obs == nil {
+		return s.call(ctx, p, name, raw)
+	}
+	start := time.Now()
+	res := s.call(ctx, p, name, raw)
+	tool := name
+	if _, ok := (*s.tools.Load())[name]; !ok {
+		tool = "unknown"
+	}
+	outcome := "ok"
+	if !res.OK {
+		outcome = res.Code
+	}
+	s.obs.ObserveCall(tool, outcome, time.Since(start))
+	return res
+}
+
+func (s *Service) call(ctx context.Context, p core.Principal, name string, raw json.RawMessage) core.Result {
 	argsHash := audit.HashArgs(raw)
 	// Bookkeeping must survive the caller going away: a cancelled request still has to release
 	// its reservation and leave its audit event. It keeps the values of ctx but not its

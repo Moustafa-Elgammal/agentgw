@@ -63,7 +63,7 @@ agents (`/v1/studio/grants`) and approve or deny a pending confirmation
 Flags: `--public-url` (issuer, default `http://127.0.0.1:8080`), `--studio-key-id` (secret is
 `AGENTGW_SIGNING_SECRET`), `--studio-keys-file` and `--admin-keys-file` (extra keys for rotation,
 reloaded on SIGHUP), `--admin-key-id` (secret is `AGENTGW_ADMIN_SECRET`), `--manifest-poll`
-(how often replicas pick up a manifest change, default 15s), `--register-per-hour`, `--max-clients`, `--client-ip-header`. The scripted end to end test is `test/conformance/auth_test.go`.
+(how often replicas pick up a manifest change, default 15s), `--register-per-hour`, `--max-clients`, `--client-ip-header`, `--ops-addr` (loopback `/healthz`, `/readyz`, `/metrics`, default `127.0.0.1:9090`). The scripted end to end test is `test/conformance/auth_test.go`.
 Grants live in memory for now, so restarting the gateway makes players link again.
 
 ## Try it

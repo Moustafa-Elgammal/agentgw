@@ -36,6 +36,7 @@ internal/connector Connector interface, level 0 REST connector, Mux (picks the c
 internal/relay     WebSocket relay for client-authoritative games: Hub, tickets, handlers, Bus (Memory); redisbus and bustest below it
 internal/audit     Auditor and Store interfaces, Ring (memory), slog, pgstore (Postgres)
 internal/activity  activity feed endpoints: player feed (studio key) and admin feed (admin key)
+internal/obs       metrics registry (Prometheus text format, no dependency), HTTP route middleware, ops handler (healthz, readyz, metrics)
 internal/gateway   the pipeline (the tool set is swapped whole by SetManifest, safe during calls)
 internal/confirm   player confirmations: Store interface, memory store, pgstore (Postgres), confirmtest contract
 internal/auth/pgstore   auth.Store on Postgres (clients, tickets, codes, grants, token hashes); Migrate and Prune
@@ -45,7 +46,7 @@ pkg/agentsig       request signing and verification (importable by Go backends)
 examples/city      example manifest and a fake backend
 ```
 
-Planned packages (see ROADMAP): `obs` (metrics and tracing).
+Planned: tracing.
 
 ## Stdio bridge
 

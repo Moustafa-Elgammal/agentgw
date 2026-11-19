@@ -1,4 +1,4 @@
-.PHONY: all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down
+.PHONY: all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check
 
 all: fmt vet test build
 
@@ -52,3 +52,17 @@ up:
 
 down:
 	docker compose down
+
+# Chart, alert rules and dashboard checks, in containers (no host install).
+HELM = docker compose run --rm helm
+HELM_CHART = /deploy/helm/agentgw
+
+helm-check:
+	$(HELM) lint $(HELM_CHART) -f $(HELM_CHART)/ci/default-values.yaml
+	$(HELM) lint $(HELM_CHART) -f $(HELM_CHART)/ci/all-values.yaml
+	$(HELM) template r $(HELM_CHART) -f $(HELM_CHART)/ci/default-values.yaml > /dev/null
+	$(HELM) template r $(HELM_CHART) -f $(HELM_CHART)/ci/all-values.yaml > /dev/null
+
+deploy-check: helm-check
+	docker compose run --rm promtool check rules /deploy/prometheus/alerts.yaml
+	docker compose run --rm dev python3 -m json.tool deploy/grafana/agentgw.json > /dev/null

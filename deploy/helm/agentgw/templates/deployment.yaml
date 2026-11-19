@@ -1,0 +1,139 @@
+{{- $_ := required "set existingSecret to a Secret with the key signing-secret" .Values.existingSecret -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentgw.fullname" . }}
+  labels:
+    {{- include "agentgw.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "agentgw.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      annotations:
+        checksum/manifest: {{ .Values.manifest | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "agentgw.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - --manifest=/etc/agentgw/manifest/manifest.json
+            - --addr=0.0.0.0:8080
+            - --ops-addr=0.0.0.0:{{ .Values.ops.port }}
+            - --public-url={{ .Values.config.publicURL }}
+            - --backend-url={{ .Values.config.backendURL }}
+            - --tenant={{ .Values.config.tenant }}
+            - --key-id={{ .Values.config.keyID }}
+            - --studio-key-id={{ .Values.config.studioKeyID }}
+            - --admin-key-id={{ .Values.config.adminKeyID }}
+            - --audit-retention={{ .Values.config.auditRetention }}
+            - --manifest-poll={{ .Values.config.manifestPoll }}
+            - --relay-ticket-ttl={{ .Values.config.relayTicketTTL }}
+            - --register-per-hour={{ .Values.config.registerPerHour }}
+            - --max-clients={{ .Values.config.maxClients }}
+            {{- if .Values.config.redisAddr }}
+            - --redis-addr={{ .Values.config.redisAddr }}
+            {{- end }}
+            {{- if .Values.config.clientIPHeader }}
+            - --client-ip-header={{ .Values.config.clientIPHeader }}
+            {{- end }}
+            {{- if .Values.config.backendAllowPrivate }}
+            - --backend-allow-private
+            {{- end }}
+            {{- if .Values.keyFilesSecret }}
+            - --studio-keys-file=/etc/agentgw/keys/studio-keys.json
+            - --admin-keys-file=/etc/agentgw/keys/admin-keys.json
+            {{- end }}
+            {{- range .Values.config.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            - name: AGENTGW_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.existingSecret }}, key: signing-secret }
+            - name: AGENTGW_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.existingSecret }}, key: admin-secret, optional: true }
+            - name: AGENTGW_RELAY_SECRET
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.existingSecret }}, key: relay-secret, optional: true }
+            - name: AGENTGW_POSTGRES_URL
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.existingSecret }}, key: postgres-url, optional: true }
+          ports:
+            - { name: http, containerPort: 8080, protocol: TCP }
+            - { name: ops, containerPort: {{ .Values.ops.port }}, protocol: TCP }
+          startupProbe:
+            httpGet: { path: /healthz, port: ops }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: ops }
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: ops }
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: manifest, mountPath: /etc/agentgw/manifest, readOnly: true }
+            {{- if .Values.keyFilesSecret }}
+            - { name: keys, mountPath: /etc/agentgw/keys, readOnly: true }
+            {{- end }}
+      volumes:
+        - name: manifest
+          configMap:
+            name: {{ include "agentgw.manifestConfigMap" . }}
+        {{- if .Values.keyFilesSecret }}
+        - name: keys
+          secret:
+            secretName: {{ .Values.keyFilesSecret }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
+      {{- end }}

@@ -37,26 +37,47 @@ const maxBody = 1 << 20 // 1 MiB
 var placeholder = regexp.MustCompile(`\{([a-z][a-z0-9_]*)\}`)
 
 // NewHTTP builds a connector with a 10 second timeout.
-func NewHTTP(baseURL, keyID string, secret []byte) *HTTP {
-	return &HTTP{
+//
+// By default the connector refuses to connect to loopback, private, link-local and other
+// special-purpose addresses and never follows redirects (see ssrf.go). Pass AllowPrivate for a
+// backend on a private network.
+func NewHTTP(baseURL, keyID string, secret []byte, opts ...Option) *HTTP {
+	c := &HTTP{
 		BaseURL: strings.TrimRight(baseURL, "/"), KeyID: keyID, Secret: secret,
-		Client: &http.Client{Timeout: 10 * time.Second}, Now: time.Now,
+		Client: newClient(true), Now: time.Now,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // Call sends the request. A transport failure is a Go error (the caller fails
 // closed and releases its reservation). A backend 4xx is a normal denied Result.
 func (c *HTTP) Call(ctx context.Context, p core.Principal, t core.Tool, args map[string]any, idem string) (core.Result, error) {
+	// These values end up in signed headers. A bad one is refused before anything is signed.
+	if !headerSafe(p.PlayerID) || !headerSafe(idem) {
+		return core.Denied("invalid_principal", "the player or call identifier is not a safe header value"), nil
+	}
 	rest := map[string]any{}
 	for k, v := range args {
 		rest[k] = v
 	}
+	var badSegment string
 	path := placeholder.ReplaceAllStringFunc(t.HTTP.URL, func(m string) string {
 		name := m[1 : len(m)-1]
 		v := fmt.Sprint(rest[name])
 		delete(rest, name)
+		// PathEscape leaves "." and ".." alone, and an empty value makes an empty segment.
+		// Either would let an argument move the request to another path.
+		if v == "" || v == "." || v == ".." {
+			badSegment = name
+		}
 		return url.PathEscape(v)
 	})
+	if badSegment != "" {
+		return core.Denied("invalid_arguments", fmt.Sprintf("argument %q cannot be used in a path (empty, \".\" or \"..\")", badSegment)), nil
+	}
 
 	var body []byte
 	target := c.BaseURL + path
@@ -119,4 +140,18 @@ func truncate(s string, n int) string {
 		return s[:n] + "..."
 	}
 	return s
+}
+
+// headerSafe accepts printable ASCII only, at most 128 bytes, and not empty. That excludes CR,
+// LF, NUL and every other control character, so a value cannot add or split a header.
+func headerSafe(s string) bool {
+	if s == "" || len(s) > 128 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }

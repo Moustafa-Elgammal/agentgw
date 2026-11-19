@@ -60,7 +60,7 @@ func setup(t *testing.T, limits policy.Limits) fixture {
 	}))
 	t.Cleanup(srv.Close)
 	a := &audit.Memory{}
-	svc := New(m, policy.NewMemory(limits, nil), connector.NewHTTP(srv.URL, "k1", secret), a)
+	svc := New(m, policy.NewMemory(limits, nil), connector.NewHTTP(srv.URL, "k1", secret, connector.AllowPrivate()), a)
 	return fixture{svc, a, srv, hits, fail}
 }
 

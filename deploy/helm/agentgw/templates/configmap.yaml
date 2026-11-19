@@ -1,0 +1,11 @@
+{{- if not .Values.existingManifestConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agentgw.manifestConfigMap" . }}
+  labels:
+    {{- include "agentgw.labels" . | nindent 4 }}
+data:
+  manifest.json: |
+{{ required "set manifest (inline) or existingManifestConfigMap" .Values.manifest | indent 4 }}
+{{- end }}

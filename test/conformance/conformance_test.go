@@ -97,7 +97,7 @@ func newRig(t *testing.T, limits policy.Limits) *rig {
 	b, a := newBackend(t), &audit.Memory{}
 	pol := policy.NewMemory(limits, nil)
 	conf := confirm.NewMemory(nil)
-	svc := gateway.New(m, pol, connector.NewHTTP(b.srv.URL, keyID, secret), a, gateway.WithConfirmations(conf))
+	svc := gateway.New(m, pol, connector.NewHTTP(b.srv.URL, keyID, secret, connector.AllowPrivate()), a, gateway.WithConfirmations(conf))
 	ts := httptest.NewServer(mcpserver.Handler(svc, mcpserver.DevAuth("conf")))
 	t.Cleanup(ts.Close)
 	return &rig{ts.URL, b, a, m, pol, conf}

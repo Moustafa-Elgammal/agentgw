@@ -321,3 +321,42 @@ down that socket.
 - **Wire protocol v1** is JSON text frames: `hello`, `call` (gateway to client), `result` (client
   to gateway). Results are validated no more than the HTTP connector's are: the game is the
   authority, the gateway still limits what may be asked.
+
+## Observability (M6)
+
+- **Own registry, no dependency.** `internal/obs` writes the Prometheus text format (0.0.4) itself:
+  counters, gauges and fixed-bucket histograms. The client library would add a dependency tree for
+  a few hundred lines of code. Revisit if OpenTelemetry metrics are needed.
+- **Cardinality is capped.** One metric keeps at most 1000 label sets; more fold into a series
+  whose label values are all `other`. The `tool` label uses the manifest name or `unknown`, so an
+  agent cannot mint series by inventing tool names. HTTP metrics use the mux pattern (the route
+  table), never the raw path; no match is `unmatched`.
+- **Metrics.** `gateway_calls_total{tool,outcome}` (outcome is `ok` or the denial code, so a failed
+  backend shows as `backend_unavailable` and a cut-off call as `outcome_unknown`),
+  `gateway_call_duration_seconds{tool}`, `relay_connections`, `relay_calls_total{result}` (`ok`,
+  `denied`, `offline`, `error`), `http_requests_total{route,code}`, `agentgw_build_info{version}`.
+  The pipeline is unchanged: `gateway.WithObserver` and `relay.WithObserver` are optional hooks
+  called once per call.
+- **Separate ops listener.** `--ops-addr` (default `127.0.0.1:9090`, empty disables) serves
+  `/healthz` (200 while the process serves), `/readyz` (200 only when the manifest is loaded and
+  Redis and Postgres answer, when configured; otherwise 503 with the failing checks; each check
+  times out after 2 s) and `/metrics`. It is never on the public listener. In compose it is
+  published on loopback only.
+
+## Backend hardening (M6)
+
+- **Default deny for private addresses.** `connector.NewHTTP` builds a client whose dialer
+  refuses loopback, private, link-local, metadata, multicast, unspecified, CGNAT and special
+  purpose ranges, checked in the dialer's `Control` hook on the resolved IP (no rebinding gap).
+  `connector.AllowPrivate()` and the flag `--backend-allow-private` opt out. The compose demo
+  sets the flag because its backend is on a private network. A compatibility change for
+  operators: a deployment whose backend is on a private address must now set the flag.
+- **Redirects are never followed**, even with the flag. A signed request is meant for the
+  configured host only. A 3xx becomes a backend error. No proxy from the environment.
+- **Path values.** Empty, `.` and `..` placeholder values are refused as `invalid_arguments`.
+- **Identifiers in headers.** Player and call ids must be printable ASCII, at most 128 bytes,
+  or the connector returns `invalid_principal` before signing.
+- **Validation.** Trailing data after the arguments object is refused, string arguments are
+  limited to 4096 bytes, and integer bounds are compared as int64 (float64 rounded values above
+  2^53 onto the bound).
+

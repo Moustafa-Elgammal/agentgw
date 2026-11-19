@@ -1,0 +1,26 @@
+replicaCount: 3
+existingSecret: agentgw-credentials
+keyFilesSecret: agentgw-keys
+manifest: |
+  {"version":1,"tools":[{"name":"get_state","description":"State.","tier":"read","http":{"method":"GET","url":"/state"}}]}
+config:
+  redisAddr: redis:6379
+  clientIPHeader: X-Forwarded-For
+  backendAllowPrivate: true
+  extraArgs: ["--max-clients=500"]
+imagePullSecrets: [{name: regcred}]
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"}
+  tls: [{secretName: agentgw-tls, hosts: [agentgw.example.com]}]
+autoscaling: {enabled: true, minReplicas: 2, maxReplicas: 8, targetCPUUtilizationPercentage: 60}
+serviceMonitor: {enabled: true, labels: {release: prom}}
+networkPolicy:
+  enabled: true
+  ingressFrom: [{namespaceSelector: {matchLabels: {name: ingress-nginx}}}]
+  opsFrom: [{namespaceSelector: {matchLabels: {name: monitoring}}}]
+  egressTo: [{namespaceSelector: {}}]
+podAnnotations: {team: games}
+topologySpreadConstraints:
+  - {maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app.kubernetes.io/name: agentgw}}}

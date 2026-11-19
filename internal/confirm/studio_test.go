@@ -364,7 +364,7 @@ func TestEndToEndWithGateway(t *testing.T) {
 	clk := newClock()
 	store := confirm.NewMemory(clk.now)
 	svc := gateway.New(m, policy.NewMemory(policy.DefaultLimits, nil),
-		connector.NewHTTP(backend.URL, "k1", []byte("s")), &audit.Memory{}, gateway.WithConfirmations(store))
+		connector.NewHTTP(backend.URL, "k1", []byte("s"), connector.AllowPrivate()), &audit.Memory{}, gateway.WithConfirmations(store))
 	h := newHandler(store, clk)
 	ctx := context.Background()
 	args := json.RawMessage(`{"x":2}`)

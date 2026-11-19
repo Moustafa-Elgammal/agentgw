@@ -38,6 +38,17 @@ func WithPingInterval(d time.Duration) Option { return func(h *Hub) { h.ping = d
 // WithLogger sets the logger. Default slog.Default().
 func WithLogger(l *slog.Logger) Option { return func(h *Hub) { h.log = l } }
 
+// Observer is told about sockets and call results, for metrics. It must not block.
+type Observer interface {
+	// Connections is called with +1 when a socket is accepted and -1 when it ends.
+	Connections(delta int)
+	// Call is called once per Hub.Call with ok, denied, offline or error.
+	Call(result string)
+}
+
+// WithObserver reports socket and call counts to o.
+func WithObserver(o Observer) Option { return func(h *Hub) { h.obs = o } }
+
 type outcome struct {
 	res core.Result
 	err error
@@ -65,6 +76,7 @@ type Hub struct {
 	ttl     time.Duration
 	ping    time.Duration
 	log     *slog.Logger
+	obs     Observer // nil: no metrics
 
 	mu      sync.Mutex
 	conns   map[string]*conn
@@ -201,6 +213,23 @@ func (h *Hub) send(ctx context.Context, c *conn, f callFrame) error {
 // No socket is a denied client_offline result. A bus failure, a lost socket or a timeout
 // is a Go error, because the client may or may not have acted.
 func (h *Hub) Call(ctx context.Context, tenant, player, tool string, args map[string]any, idem string) (core.Result, error) {
+	res, err := h.call(ctx, tenant, player, tool, args, idem)
+	if h.obs != nil {
+		switch {
+		case err != nil:
+			h.obs.Call("error")
+		case res.OK:
+			h.obs.Call("ok")
+		case res.Code == "client_offline":
+			h.obs.Call("offline")
+		default:
+			h.obs.Call("denied")
+		}
+	}
+	return res, err
+}
+
+func (h *Hub) call(ctx context.Context, tenant, player, tool string, args map[string]any, idem string) (core.Result, error) {
 	k := key(tenant, player)
 	owner, ok, err := h.bus.Owner(ctx, k)
 	if err != nil {
@@ -277,6 +306,10 @@ func (h *Hub) Serve(ctx context.Context, tenant, player string, ws *websocket.Co
 		}()
 	}
 	defer h.drop(c)
+	if h.obs != nil {
+		h.obs.Connections(1)
+		defer h.obs.Connections(-1)
+	}
 
 	hello, _ := json.Marshal(helloFrame{Type: typeHello, Protocol: ProtocolVersion})
 	if err := ws.Write(ctx, websocket.MessageText, hello); err != nil {

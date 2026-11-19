@@ -1,0 +1,122 @@
+# Default values for the agentgw chart. Secrets are never set here: point existingSecret at a
+# Secret you manage (sealed-secrets, external-secrets, or kubectl create secret).
+
+image:
+  repository: ghcr.io/moustafa-elgammal/agentgw
+  tag: ""            # defaults to the chart appVersion
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# More than one replica needs a shared Redis (policy) and Postgres (confirmations, auth,
+# manifests, audit). Without them each replica keeps its own limits and state.
+replicaCount: 2
+
+config:
+  tenant: default
+  # Public base URL of this gateway: the OAuth issuer, and the MCP resource is <publicURL>/mcp.
+  publicURL: https://agentgw.example.com
+  # Base URL of the game backend that receives signed calls.
+  backendURL: http://game-backend.default.svc:8080
+  # Allow the backend URL to resolve to private or loopback addresses. Leave false in production
+  # unless the backend really lives on a private network (it usually does in a cluster: set true
+  # deliberately).
+  backendAllowPrivate: false
+  keyID: gateway-1
+  studioKeyID: studio-1
+  adminKeyID: admin-1
+  redisAddr: ""           # for example redis-master.cache.svc:6379
+  auditRetention: 720h    # 0 keeps audit events forever
+  manifestPoll: 15s
+  relayTicketTTL: 60s
+  clientIPHeader: ""      # set ONLY behind a proxy that overwrites it, for example X-Forwarded-For
+  registerPerHour: 10
+  maxClients: 10000
+  extraArgs: []           # extra gateway flags, one per item
+
+# Seed manifest, used only when the manifest store has no active version. After that the store
+# (uploads through /v1/studio/manifest) is the source of truth. Give the manifest inline, or
+# name an existing ConfigMap that holds the key manifest.json.
+manifest: ""
+existingManifestConfigMap: ""
+
+# One Secret holding the credentials. Keys:
+#   signing-secret  required   AGENTGW_SIGNING_SECRET (studio key and backend signing)
+#   admin-secret    optional   AGENTGW_ADMIN_SECRET (mounts the manifest and admin feed endpoints)
+#   relay-secret    optional   AGENTGW_RELAY_SECRET (enables the relay)
+#   postgres-url    optional   AGENTGW_POSTGRES_URL
+existingSecret: ""
+
+# Optional Secret with key files for rotation. Keys studio-keys.json and admin-keys.json are
+# mounted under /etc/agentgw/keys and reloaded on SIGHUP (see docs/RUNBOOK.md).
+keyFilesSecret: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ops:
+  port: 9090   # /healthz, /readyz, /metrics. Not exposed through the Service or Ingress
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: agentgw.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+terminationGracePeriodSeconds: 30
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  labels: {}   # for example release: kube-prometheus-stack
+
+networkPolicy:
+  enabled: false
+  # Who may reach the public port. Empty means any source.
+  ingressFrom: []
+  # Who may scrape the ops port, for example [{namespaceSelector: {matchLabels: {name: monitoring}}}].
+  # Empty means no one but probes from the node (kubelet traffic is not filtered).
+  opsFrom: []
+  # Where the gateway may connect. Empty egress rules allow all egress, so set these when enabled.
+  egressTo: []

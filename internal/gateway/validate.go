@@ -4,12 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"slices"
 	"sort"
 	"time"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/core"
 )
+
+// MaxStringArg is the longest string argument a tool accepts. Manifests have no per-param
+// length limit, so this bounds what reaches the game backend.
+const MaxStringArg = 4096
 
 func nowUTC() time.Time { return time.Now().UTC() }
 
@@ -23,6 +28,11 @@ func Validate(t core.Tool, raw json.RawMessage) (map[string]any, int64, error) {
 		dec.UseNumber()
 		if err := dec.Decode(&args); err != nil {
 			return nil, 0, fmt.Errorf("arguments must be a JSON object: %v", err)
+		}
+		// A second value after the object would be ignored here but is part of what was hashed
+		// for the audit event, so refuse it.
+		if _, err := dec.Token(); err != io.EOF {
+			return nil, 0, fmt.Errorf("arguments must be one JSON object, found extra data after it")
 		}
 	}
 	names := make([]string, 0, len(t.Params))
@@ -69,6 +79,9 @@ func convert(name string, p core.Param, v any) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("argument %q must be a string", name)
 		}
+		if len(s) > MaxStringArg {
+			return nil, fmt.Errorf("argument %q is too long (at most %d bytes)", name, MaxStringArg)
+		}
 		if len(p.Enum) > 0 && !slices.Contains(p.Enum, s) {
 			return nil, fmt.Errorf("invalid %s %q: choose one of %v", name, s, p.Enum)
 		}
@@ -88,8 +101,12 @@ func convert(name string, p core.Param, v any) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("argument %q must be an integer", name)
 		}
-		if err := checkRange(name, p, float64(i)); err != nil {
-			return nil, err
+		// Compared as integers: through float64, values above 2^53 would round onto the bound.
+		if p.Min != nil && i < *p.Min {
+			return nil, fmt.Errorf("argument %q must be at least %d", name, *p.Min)
+		}
+		if p.Max != nil && i > *p.Max {
+			return nil, fmt.Errorf("argument %q must be at most %d", name, *p.Max)
 		}
 		return i, nil
 	case "number":

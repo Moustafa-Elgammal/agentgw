@@ -104,7 +104,7 @@ func TestCancelledCallStopsBackendAndReleasesEverything(t *testing.T) {
 				}
 				b, a := newSlowBackend(t), &audit.Memory{}
 				pol := policy.NewMemory(policy.DefaultLimits, nil)
-				svc := gateway.New(m, pol, connector.NewHTTP(b.srv.URL, keyID, secret), a)
+				svc := gateway.New(m, pol, connector.NewHTTP(b.srv.URL, keyID, secret, connector.AllowPrivate()), a)
 				ts := httptest.NewServer(mcpserver.Handler(svc, mcpserver.DevAuth("conf")))
 				defer ts.Close()
 				g := &rig{url: ts.URL}
