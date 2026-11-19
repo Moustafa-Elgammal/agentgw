@@ -1,0 +1,30 @@
+# Tutorial 9: the demo game backend (the city) that the gateway calls with signed requests. It
+# verifies the signature with the same secret the gateway signs with, so it reads the same Secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: city-backend, namespace: agentgw-tutorial }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: city-backend } }
+  template:
+    metadata: { labels: { app: city-backend } }
+    spec:
+      containers:
+        - name: backend
+          image: city-backend:tutorial
+          imagePullPolicy: Never   # loaded into the cluster with "kind load docker-image"
+          env:
+            - name: AGENTGW_SIGNING_SECRET
+              valueFrom: { secretKeyRef: { name: agentgw-credentials, key: signing-secret } }
+            - { name: BACKEND_ADDR, value: "0.0.0.0:9090" }
+          ports: [{ containerPort: 9090 }]
+          readinessProbe:
+            tcpSocket: { port: 9090 }
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata: { name: city-backend, namespace: agentgw-tutorial }
+spec:
+  selector: { app: city-backend }
+  ports: [{ port: 9090 }]

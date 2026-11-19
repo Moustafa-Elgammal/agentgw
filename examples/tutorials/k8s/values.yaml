@@ -1,0 +1,25 @@
+# Tutorial 9: chart values for a local kind cluster. The manifest is not here: the tutorial
+# passes it with --set-file manifest=examples/city/manifest.yaml. Secrets are never in values.
+replicaCount: 2
+
+image:
+  repository: agentgw
+  tag: tutorial
+  pullPolicy: Never    # the image is loaded into the cluster, not pulled
+
+existingSecret: agentgw-credentials
+
+config:
+  tenant: city
+  # The address players and agents use. The tutorial reaches the gateway with kubectl port-forward
+  # on this port. In production this is your public https URL.
+  publicURL: http://127.0.0.1:18209
+  backendURL: http://city-backend:9090
+  backendAllowPrivate: true   # the backend is a ClusterIP address, which counts as private
+  redisAddr: redis:6379
+  manifestPoll: 2s            # so a manifest upload shows up within seconds in this tutorial
+
+# One pod must stay up during a node drain; the chart default needs two replicas for that.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

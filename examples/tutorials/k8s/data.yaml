@@ -1,0 +1,56 @@
+# Tutorial 9: Postgres and Redis for the gateway. Dev only: one replica each, data on an emptyDir
+# (gone when the pod goes), and a password that is public. In production, use your managed
+# Postgres and Redis and put the real connection string in the Secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: postgres, namespace: agentgw-tutorial }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          env:
+            - { name: POSTGRES_USER, value: agentgw }
+            - { name: POSTGRES_PASSWORD, value: agentgw-dev }
+            - { name: POSTGRES_DB, value: agentgw }
+          ports: [{ containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "agentgw", "-d", "agentgw"] }
+            periodSeconds: 2
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: agentgw-tutorial }
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: redis, namespace: agentgw-tutorial }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports: [{ containerPort: 6379 }]
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata: { name: redis, namespace: agentgw-tutorial }
+spec:
+  selector: { app: redis }
+  ports: [{ port: 6379 }]

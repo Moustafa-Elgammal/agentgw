@@ -1,0 +1,14 @@
+# Tutorial 10: two tools that run inside the game client, not on a REST backend.
+# backend: relay sends the call down the player's WebSocket instead of to --backend-url.
+version: 1
+game: relay-demo
+tools:
+  - name: get_state
+    description: The game's wood and farm counts. Call this first.
+    tier: read
+    backend: relay
+
+  - name: build_farm
+    description: Build a farm. A farm costs 5 wood. You start with 10 wood.
+    tier: medium
+    backend: relay

@@ -1,0 +1,14 @@
+# Tutorial 10: the OAuth demo stack plus the relay, with a manifest whose tools use backend: relay.
+#
+#   docker compose -f docker-compose.yml -f examples/tutorials/compose.oauth.yml \
+#     -f examples/tutorials/compose.relay.yml up -d --build gateway
+#
+# Dev only: the relay secret is a placeholder. A real deployment gives each replica the same
+# long random AGENTGW_RELAY_SECRET (it signs relay tickets) and publishes the gateway over https,
+# so the game connects with wss://.
+services:
+  gateway:
+    environment:
+      - AGENTGW_RELAY_SECRET=dev-relay-secret
+    volumes:
+      - ./examples/tutorials/relay-game:/etc/agentgw:ro

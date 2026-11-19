@@ -60,6 +60,8 @@ const EXPECTED = new Map([
   ['docs/tutorials/06-go-live.md', '6. Go live'],
   ['docs/tutorials/07-test-your-integration.md', '7. Test your integration'],
   ['docs/tutorials/08-sign-in-with-your-identity-provider.md', '8. Sign in with your identity provider'],
+  ['docs/tutorials/09-run-it-on-kubernetes.md', '9. Run it on Kubernetes'],
+  ['docs/tutorials/10-connect-a-unity-game-through-the-relay.md', '10. Connect a Unity game through the relay'],
 ]);
 
 // Title overrides, by route, where the H1 would be ambiguous in the sidebar.
@@ -70,6 +72,8 @@ const ORDER = [
   'guides/01-play-the-example-game', 'guides/02-describe-your-actions', 'guides/03-accept-signed-calls',
   'guides/04-link-a-player', 'guides/05-ask-before-big-actions', 'guides/06-go-live',
   'guides/07-test-your-integration', 'guides/08-sign-in-with-your-identity-provider',
+  'guides/09-run-it-on-kubernetes',
+  'guides/10-connect-a-unity-game-through-the-relay',
   'guides/best-practices', 'guides/cookbook', 'guides/troubleshooting', 'guides/faq',
   'get-started/overview', 'get-started/quickstart', 'get-started/connect-an-agent', 'get-started/claude-desktop', 'get-started/glossary',
   'concepts/pipeline', 'concepts/tiers-and-policy', 'concepts/players-grants-confirmations',
