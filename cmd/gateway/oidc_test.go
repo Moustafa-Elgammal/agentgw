@@ -64,6 +64,15 @@ func TestBuildOIDC(t *testing.T) {
 		{"issuer differs from its own document", func(i string) oidcOptions { return oidcOptions{Issuer: i, ClientID: "gw", AllowHTTP: true} }, mismatch.URL, "client-secret", goodSession, true, []string{"discovery", "will not start"}},
 		{"unreachable issuer", func(i string) oidcOptions { return oidcOptions{Issuer: i, ClientID: "gw", AllowHTTP: true} }, "http://127.0.0.1:1", "client-secret", goodSession, true, []string{"discovery"}},
 		{"http issuer without the dev switch", func(i string) oidcOptions { return oidcOptions{Issuer: i, ClientID: "gw"} }, good.URL, "client-secret", goodSession, true, []string{"issuer"}},
+		{"public client without a secret", func(i string) oidcOptions {
+			return oidcOptions{Issuer: i, ClientID: "gw", AllowHTTP: true, PublicClient: true}
+		}, good.URL, "", goodSession, false, nil},
+		{"public client with a leftover secret", func(i string) oidcOptions {
+			return oidcOptions{Issuer: i, ClientID: "gw", AllowHTTP: true, PublicClient: true}
+		}, good.URL, "client-secret", goodSession, true, []string{"--oidc-public-client", "remove"}},
+		{"confidential client error names the public option", func(i string) oidcOptions {
+			return oidcOptions{Issuer: i, ClientID: "gw", AllowHTTP: true}
+		}, good.URL, "", goodSession, true, []string{"--oidc-public-client"}},
 		{"settings without an issuer", func(string) oidcOptions { return oidcOptions{ClientID: "gw"} }, "", "", "", true, []string{"--oidc-issuer"}},
 	}
 	for _, tt := range tests {

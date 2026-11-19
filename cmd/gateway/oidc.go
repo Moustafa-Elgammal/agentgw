@@ -22,6 +22,9 @@ type oidcOptions struct {
 	Algs        string
 	// AllowHTTP lets the issuer be plain http on a loopback address (for a local demo IdP).
 	AllowHTTP bool
+	// PublicClient registers the gateway at the identity provider as a public client: no client
+	// secret, PKCE only. The secret must then be absent, so a leftover one is not silently ignored.
+	PublicClient bool
 }
 
 // Secrets come from the environment, never from flags, so they stay out of process listings.
@@ -56,8 +59,11 @@ func buildOIDC(ctx context.Context, log *slog.Logger, o oidcOptions, publicURL s
 		problems = append(problems, "--oidc-client-id is required")
 	}
 	clientSecret := os.Getenv(envOIDCClientSecret)
-	if clientSecret == "" {
-		problems = append(problems, envOIDCClientSecret+" is required (the client secret registered at the identity provider)")
+	switch {
+	case o.PublicClient && clientSecret != "":
+		problems = append(problems, envOIDCClientSecret+" is set but --oidc-public-client is on: a public client has no secret, so remove the secret or the flag")
+	case !o.PublicClient && clientSecret == "":
+		problems = append(problems, envOIDCClientSecret+" is required (the client secret registered at the identity provider), or set --oidc-public-client if the client is registered without one")
 	}
 	sessionSecret := os.Getenv(envOIDCSessionSecret)
 	if len(sessionSecret) < minSessionSecret {
@@ -98,6 +104,6 @@ func buildOIDC(ctx context.Context, log *slog.Logger, o oidcOptions, publicURL s
 		claim = oidc.DefaultPlayerClaim
 	}
 	log.Info("oidc sign-in enabled", "issuer", o.Issuer, "client_id", o.ClientID, "player_claim", claim,
-		"algs", strings.Join(algs, ","), "idp_origin", origin, "callback", cfg.RedirectURL) // secrets are never logged
+		"algs", strings.Join(algs, ","), "idp_origin", origin, "callback", cfg.RedirectURL, "public_client", o.PublicClient) // secrets are never logged
 	return flow, nil
 }

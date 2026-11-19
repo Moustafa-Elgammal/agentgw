@@ -35,6 +35,7 @@ The gateway server.
 | `--oidc-client-id` | string | none | OIDC client id registered at the identity provider, with the redirect URI &lt;public-url&gt;/authorize/oidc/callback |
 | `--oidc-issuer` | string | none | turn on sign in with your identity provider at the consent page: its OIDC issuer URL. Needs --oidc-client-id and the secrets AGENTGW_OIDC_CLIENT_SECRET and AGENTGW_OIDC_SESSION_SECRET (not with --dev-auth) |
 | `--oidc-player-claim` | string | `sub` | ID token claim that carries the player id your game uses. It must be stable for a person for ever: not an email address or a display name |
+| `--oidc-public-client` | bool | false | register at the identity provider as a public client: no client secret, PKCE only. AGENTGW_OIDC_CLIENT_SECRET must then be unset |
 | `--oidc-scopes` | string | `openid` | scopes requested from the identity provider, space or comma separated (openid is always included) |
 | `--ops-addr` | string | `127.0.0.1:9090` | listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables) |
 | `--postgres-max-conns` | int | 0 | most Postgres connections the pool opens (0 keeps the driver default, the larger of 4 and the CPU count; a pool_max_conns in the URL is used when this is 0) |

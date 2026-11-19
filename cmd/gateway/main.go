@@ -272,6 +272,7 @@ func main() {
 		oidcClaim     = flag.String("oidc-player-claim", "sub", "ID token claim that carries the player id your game uses. It must be stable for a person for ever: not an email address or a display name")
 		oidcScopes    = flag.String("oidc-scopes", "openid", "scopes requested from the identity provider, space or comma separated (openid is always included)")
 		oidcAlgs      = flag.String("oidc-algs", "RS256,ES256", "ID token signature algorithms accepted. Asymmetric only: none and the HS family are refused")
+		oidcPublic    = flag.Bool("oidc-public-client", false, "register at the identity provider as a public client: no client secret, PKCE only. AGENTGW_OIDC_CLIENT_SECRET must then be unset")
 		oidcHTTP      = flag.Bool("oidc-allow-insecure-http", false, "DEV ONLY: allow an http issuer on a loopback address, for a local identity provider")
 		maxBody       = flag.Int64("max-body", 1048576, "largest request body in bytes. OAuth and studio endpoints keep their lower caps, manifest upload its own")
 		redisAddr     = flag.String("redis-addr", os.Getenv("AGENTGW_REDIS_ADDR"), "Redis address for the shared policy store (default: in-memory, single process)")
@@ -506,7 +507,7 @@ func main() {
 		if !reloadKeys(log, sv, "studio", *studioKeyID, []byte(secret), *studioKeys, *studioOnly, keyReloads, &reloaders) {
 			os.Exit(1)
 		}
-		oidcLogin, err := buildOIDC(ctx0, log, oidcOptions{Issuer: *oidcIssuer, ClientID: *oidcClientID, PlayerClaim: *oidcClaim, Scopes: *oidcScopes, Algs: *oidcAlgs, AllowHTTP: *oidcHTTP}, *publicURL)
+		oidcLogin, err := buildOIDC(ctx0, log, oidcOptions{Issuer: *oidcIssuer, ClientID: *oidcClientID, PlayerClaim: *oidcClaim, Scopes: *oidcScopes, Algs: *oidcAlgs, AllowHTTP: *oidcHTTP, PublicClient: *oidcPublic}, *publicURL)
 		if err != nil {
 			log.Error("oidc", "err", err)
 			os.Exit(1)
