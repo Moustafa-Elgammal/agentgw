@@ -21,8 +21,7 @@ and in posts. Keep the GIF under 2 MB; if it is larger, lower `--font-size` or `
 Alternative with [VHS](https://github.com/charmbracelet/vhs): a tape that runs `scripts/demo.sh`
 and sets `Set Width 1100`, `Set Height 600`, `Set FontSize 18`, then `Sleep 70s`.
 
-## After recording
+## Where it is used
 
-Put the GIF at `site/public/demo.gif`, show it at the top of the site's landing page and add
-`![agentgw demo](https://github.com/Moustafa-Elgammal/agentgw/raw/main/site/public/demo.gif)` under
-the first paragraph of the README. Then tick the demo item in `docs/LAUNCH-CHECKLIST.md`.
+The recording is `site/public/demo.gif` (landing page and README) with `site/public/demo.cast` beside it.
+To re-record after the demo changes, run the two commands above and replace both files.

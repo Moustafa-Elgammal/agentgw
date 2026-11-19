@@ -70,7 +70,7 @@ undone by deleting it: publish `v0.1.1` and mark the bad release as a pre-releas
 - Make the `tinycity-mock` repository public after the same audit, and update its README link.
 - Have one person who has not seen the project follow the quickstart and the first tutorials, and
   fix what slows them down.
-- Record a short terminal demo for the site's landing page (`scripts/demo.sh`, see `docs/DEMO.md`).
+- Done: recorded the terminal demo for the site's landing page (`scripts/demo.sh`, see `docs/DEMO.md`).
 - Announce it, once, where MCP and game developers read.
 
 ## Not covered by any local check

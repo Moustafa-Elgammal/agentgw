@@ -18,6 +18,8 @@ signed request, and records every attempt in an audit log. It works with any bac
 because the contract is a manifest plus a signed HTTP request, not a library. Games whose logic
 runs in the client can use a WebSocket relay instead.
 
+![agentgw demo: a sale succeeds, then a daily cap and a cooldown stop the agent](site/public/demo.gif)
+
 ## Two modes for players
 
 - **Coach**: read-only. State, prices, advice.
