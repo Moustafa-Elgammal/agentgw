@@ -50,9 +50,9 @@ Run the tests: `docker compose run --rm dev make test`. To connect Claude Deskto
 
 Version `0.1` (before 1.0). The pipeline, MCP endpoint, OAuth 2.1, Redis and Postgres stores, confirmations,
 manifest upload and rollback, activity feed, relay, metrics, a Helm chart, optional OIDC sign-in
-at consent, the project site and ten tutorials are built. The tutorial scripts run in CI, except
-the Kubernetes one (9), which runs weekly in its own workflow and has not been verified on a
-cluster yet. OIDC sign-in has been run against Dex and Keycloak. Not yet: a hosted offering, a
+at consent, the project site and eleven tutorials are built. The tutorial scripts run in CI,
+except the two Kubernetes ones: tutorial 11 (Docker Desktop) has been run against a real cluster,
+and tutorial 9 (kind) runs weekly in its own workflow and has not been run yet. OIDC sign-in has been run against Dex and Keycloak. Not yet: a hosted offering, a
 hosted identity provider, and the relay client has only been tried with a reference C# client, not
 inside Unity (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 

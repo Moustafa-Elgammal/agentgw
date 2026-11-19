@@ -15,9 +15,10 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
   and (with `PUBLIC_CLIENT=1`) a public client.
 - `AUDIT_QUEUE=1 scripts/soak.sh`: soak with the batching audit writer, checking that no event is
   dropped. A 15 minute run is recorded in the runbook and on the soak history page of the site.
-- Tutorial 9 (run it on Kubernetes with the Helm chart) and tutorial 10 (connect a Unity game
-  through the relay, verified with the console sample, not inside Unity). Tutorial 9's script has
-  its own make target and weekly workflow and has not yet run against a cluster.
+- Tutorials for the Helm chart on a local cluster: 9 (kind) and 11 (Docker Desktop's Kubernetes).
+  Tutorial 11 has been run against a real cluster, twice. Tutorial 9 has its own make target and
+  weekly workflow and has not run yet. Tutorial 10 connects a Unity game through the relay,
+  verified with the console sample, not inside Unity.
 - Design note for partitioning the audit table (a proposal, nothing built).
 - `scripts/bench-overhead.sh` and `test/load --direct-url --warmup --json`: measure what the
   gateway adds to a call by sending the same signed request directly to the backend and through
@@ -26,6 +27,10 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ### Fixed
 
+- Several replicas starting together could crash one of them with `duplicate key ... pg_type_typname_nsp_index`:
+  the schema migrations (`CREATE TABLE IF NOT EXISTS`) raced. They now run under a Postgres advisory
+  lock, so a rollout or autoscale event no longer restarts a pod. Found by installing the Helm
+  chart on a real cluster.
 - The connector now keeps up to 100 idle connections to the backend (`MaxIdleConnsPerHost`, which
   defaulted to 2). Above 2 concurrent calls it closed connections after every call, filled
   TIME_WAIT and ended in `backend_unavailable` at high load. Found by the overhead benchmark.
