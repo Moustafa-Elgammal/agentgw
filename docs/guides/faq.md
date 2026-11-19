@@ -89,7 +89,7 @@ No. You run it. Hosting is an open question in [DECISIONS.md](../DECISIONS.md).
 ### How do I run more than one replica?
 
 Configure Redis and Postgres first. Without them each replica keeps its own limits and stores, and
-a player could get the budget twice. The Helm chart in `deploy/helm/agentgw` runs several.
+a player could get the budget twice. The Helm chart in `deploy/helm/agentgw` runs several ([tutorial 9](../tutorials/09-run-it-on-kubernetes.md)).
 
 ### What does it cost to run?
 
@@ -112,8 +112,9 @@ change within `--manifest-poll`.
 
 Yes, with the relay. Mark tools `"backend": "relay"` and the game client opens an outbound WebSocket
 with a ticket your backend mints. Calls go down that socket. See the relay section of
-[PROTOCOL.md](../PROTOCOL.md). There is no Unity package yet, only the wire protocol and a Go
-sample client.
+[PROTOCOL.md](../PROTOCOL.md) and [tutorial 10](../tutorials/10-connect-a-unity-game-through-the-relay.md).
+There is a reference C# client with tests, but it has not been run inside Unity and there is no
+Unity package yet.
 
 ### Which backend languages are supported?
 

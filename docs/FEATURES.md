@@ -18,7 +18,7 @@ What is built today and where it lives in the code. The roadmap is in [ROADMAP.m
 | Studio kill switch API: switch a tool, a player or the game off and on, audited (admin-signed) | `internal/switchapi` |
 | MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
 | OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
-| OIDC sign-in at consent: discovery, PKCE, nonce, signature check with go-oidc, sealed session cookie, claim to player mapping | `internal/auth/oidc`, `cmd/gateway/oidc.go` |
+| OIDC sign-in at consent: discovery, PKCE, nonce, signature check with go-oidc, sealed session cookie, claim to player mapping | `internal/auth/oidc`, `cmd/gateway/oidc.go` (confidential or public client with `--oidc-public-client`) |
 | Versioned manifests: upload, list, roll back, hot swap, replica sync (admin-signed, memory or Postgres) | `internal/manifeststore`, `internal/manifeststore/pgstore` |
 | Studio key rotation: key sets, key files, reload on SIGHUP | `internal/studiosig` |
 | Optional batched audit writes: bounded queue, one `COPY` per batch, drop-and-count overflow, drained on shutdown (`--audit-queue`) | `internal/audit` (`Batcher`), `internal/audit/pgstore` |

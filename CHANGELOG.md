@@ -9,6 +9,16 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ### Added
 
+- `--oidc-public-client` (Helm: `oidc.publicClient`): register the gateway at the identity provider
+  without a client secret, PKCE only. A leftover `AGENTGW_OIDC_CLIENT_SECRET` stops the start.
+- `scripts/oidc-keycloak-check.sh`: the full OIDC sign-in against Keycloak, for a confidential
+  and (with `PUBLIC_CLIENT=1`) a public client.
+- `AUDIT_QUEUE=1 scripts/soak.sh`: soak with the batching audit writer, checking that no event is
+  dropped. A 15 minute run is recorded in the runbook and on the soak history page of the site.
+- Tutorial 9 (run it on Kubernetes with the Helm chart) and tutorial 10 (connect a Unity game
+  through the relay, verified with the console sample, not inside Unity). Tutorial 9's script has
+  its own make target and weekly workflow and has not yet run against a cluster.
+- Design note for partitioning the audit table (a proposal, nothing built).
 - `scripts/bench-overhead.sh` and `test/load --direct-url --warmup --json`: measure what the
   gateway adds to a call by sending the same signed request directly to the backend and through
   the gateway. The homepage shows the result.

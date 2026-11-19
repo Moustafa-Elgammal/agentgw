@@ -512,8 +512,9 @@ rm -rf .tutorial-keys
 The repository has a Helm chart in `deploy/helm/agentgw`. It never takes secrets inline: you
 create a Secret and name it with `existingSecret`. It sets non-root, a read-only filesystem,
 probes on the ops port, a disruption budget, and optional ingress, autoscaling, `ServiceMonitor`
-and `NetworkPolicy`. The install command is in the [runbook](../RUNBOOK.md#deploy-with-helm). Check
-the chart without installing anything:
+and `NetworkPolicy`. [Tutorial 9](09-run-it-on-kubernetes.md) installs it on a local cluster. The
+install command is in the [runbook](../RUNBOOK.md#deploy-with-helm). Check the chart without
+installing anything:
 
 ```bash
 make helm-check

@@ -50,9 +50,11 @@ Run the tests: `docker compose run --rm dev make test`. To connect Claude Deskto
 
 Version `0.1` (before 1.0). The pipeline, MCP endpoint, OAuth 2.1, Redis and Postgres stores, confirmations,
 manifest upload and rollback, activity feed, relay, metrics, a Helm chart, optional OIDC sign-in
-at consent, the project site and seven tutorials are built and tested. Not yet: a hosted
-offering, and the relay client has only been tried with a reference C# client, not inside Unity
-(see [docs/ROADMAP.md](docs/ROADMAP.md)).
+at consent, the project site and ten tutorials are built. The tutorial scripts run in CI, except
+the Kubernetes one (9), which runs weekly in its own workflow and has not been verified on a
+cluster yet. OIDC sign-in has been run against Dex and Keycloak. Not yet: a hosted offering, a
+hosted identity provider, and the relay client has only been tried with a reference C# client, not
+inside Unity (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 Before 1.0, the manifest format, the signed request and some protocol details
 may still change. Every such change is recorded in [docs/DECISIONS.md](docs/DECISIONS.md) and
@@ -69,7 +71,10 @@ the [CHANGELOG](CHANGELOG.md). Pin a version if you build on it.
 - Versioned manifests with upload, rollback and hot swap, no restart. Key rotation.
 - Activity feed for players and studios. Audit stores hashes of arguments, never the arguments.
 - Relay for client-authoritative games, across several gateway replicas.
+- Sign-in with your own identity provider at consent (OIDC, confidential or public client).
 - Metrics, health checks, an SSRF-safe connector, a Helm chart and a runbook.
+- Measured, not claimed: a 1 hour soak and an overhead benchmark you can repeat
+  ([results](https://elgx.me/agentgw/project/soak-history/)).
 
 The full component list is in [docs/FEATURES.md](docs/FEATURES.md).
 
