@@ -31,8 +31,8 @@ The `release` workflow runs on a tag matching `v*`.
 2. **publish**, only if the tests pass:
    - GoReleaser builds `gateway`, `gwctl` and `gwbridge` for linux, darwin and windows on
      amd64 and arm64, archives them, writes `checksums.txt`, writes an SPDX SBOM for each archive
-     (syft), and signs `checksums.txt` keyless with cosign (`checksums.txt.sig` and
-     `checksums.txt.pem`). It creates the GitHub release with the git log as notes.
+     (syft), and signs `checksums.txt` keyless with cosign (one bundle,
+     `checksums.txt.sigstore.json`). It creates the GitHub release with the git log as notes.
    - A build provenance attestation is created for the files listed in `checksums.txt`.
    - Multi-arch (linux/amd64 and linux/arm64) images are built from the `gateway` and `bridge`
      Dockerfile targets and pushed to `ghcr.io/moustafa-elgammal/agentgw` and
@@ -54,11 +54,11 @@ ID='^https://github.com/Moustafa-Elgammal/agentgw/\.github/workflows/release\.ym
 ISSUER=https://token.actions.githubusercontent.com
 ```
 
-**Binaries.** Download the archive, `checksums.txt`, `checksums.txt.sig` and `checksums.txt.pem`.
+**Binaries.** Download the archive, `checksums.txt` and `checksums.txt.sigstore.json`.
 
 ```bash
 cosign verify-blob checksums.txt \
-  --signature checksums.txt.sig --certificate checksums.txt.pem \
+  --bundle checksums.txt.sigstore.json \
   --certificate-identity-regexp "$ID" --certificate-oidc-issuer "$ISSUER"
 sha256sum --ignore-missing -c checksums.txt        # on macOS: shasum -a 256 --ignore-missing -c checksums.txt
 gh attestation verify agentgw_0.1.0_linux_amd64.tar.gz --repo Moustafa-Elgammal/agentgw

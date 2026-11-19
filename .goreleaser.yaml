@@ -58,9 +58,10 @@ sboms:
 signs:
   - cmd: cosign
     artifacts: checksum
-    signature: "${artifact}.sig"
-    certificate: "${artifact}.pem"
-    args: ["sign-blob", "--yes", "--output-signature=${signature}", "--output-certificate=${certificate}", "${artifact}"]
+    # cosign v3 writes one bundle (signature, certificate and transparency log entry together).
+    # The old --output-signature and --output-certificate flags were removed.
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--yes", "--bundle=${signature}", "${artifact}"]
 
 changelog:
   use: git
