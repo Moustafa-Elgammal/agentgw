@@ -39,6 +39,17 @@ config:
   maxClients: 10000
   extraArgs: []           # extra gateway flags, one per item
 
+# Sign in with the studio's own identity provider at the consent page (OIDC). Off while issuer is
+# empty. Register <config.publicURL>/authorize/oidc/callback as the redirect URI at the provider,
+# and put the two secrets in existingSecret (see below). The gateway refuses to start if the
+# provider cannot be reached, so a wrong issuer shows up at deploy time. See docs/RUNBOOK.md.
+oidc:
+  issuer: ""            # for example https://login.example.com
+  clientId: ""
+  playerClaim: sub      # a claim that is stable for a person for ever and equals your player id
+  scopes: openid
+  algs: "RS256,ES256"   # asymmetric only
+
 # Seed manifest, used only when the manifest store has no active version. After that the store
 # (uploads through /v1/studio/manifest) is the source of truth. Give the manifest inline, or
 # name an existing ConfigMap that holds the key named by manifestFile.
@@ -54,6 +65,8 @@ existingManifestConfigMap: ""
 #   admin-secret    optional   AGENTGW_ADMIN_SECRET (mounts the manifest and admin feed endpoints)
 #   relay-secret    optional   AGENTGW_RELAY_SECRET (enables the relay)
 #   postgres-url    optional   AGENTGW_POSTGRES_URL
+#   oidc-client-secret   required when oidc.issuer is set   AGENTGW_OIDC_CLIENT_SECRET
+#   oidc-session-secret  required when oidc.issuer is set   AGENTGW_OIDC_SESSION_SECRET (32 bytes or more)
 existingSecret: ""
 
 # Optional Secret with key files for rotation. Keys studio-keys.json and admin-keys.json are

@@ -12,6 +12,12 @@ config:
   maxScope: coach
   maxBody: 262144
   extraArgs: ["--max-clients=500"]
+oidc:
+  issuer: https://login.example.com
+  clientId: agentgw
+  playerClaim: game_id
+  scopes: openid profile
+  algs: ES256
 imagePullSecrets: [{name: regcred}]
 ingress:
   enabled: true
