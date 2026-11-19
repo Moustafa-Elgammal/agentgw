@@ -9,11 +9,38 @@ const BASE = '/agentgw';
 const DESCRIPTION =
   'An open-source gateway that lets a player\'s own AI agent act safely inside a game: tools from a manifest, policy, signed backend calls, player confirmations and an audit log.';
 
+// Loads mermaid once per page and draws every diagram, in the theme the reader picked.
+const MERMAID_SCRIPT = `
+import mermaid from 'mermaid';
+// GitHub draws mermaid fences itself, so the docs keep plain fences. Starlight renders them as
+// code blocks, so swap each one for a diagram container before drawing.
+const draw = async () => {
+  for (const code of document.querySelectorAll('pre[data-language="mermaid"]')) {
+    const lines = [...code.querySelectorAll('.ec-line')].map((l) => l.textContent);
+    const holder = code.closest('.expressive-code') ?? code;
+    const diagram = document.createElement('pre');
+    diagram.className = 'mermaid';
+    diagram.textContent = lines.join('\\n');
+    holder.replaceWith(diagram);
+  }
+  const nodes = document.querySelectorAll('pre.mermaid:not([data-processed])');
+  if (!nodes.length) return;
+  const dark = document.documentElement.dataset.theme !== 'light';
+  mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'strict' });
+  await mermaid.run({ nodes });
+};
+draw();
+`;
+
 export default defineConfig({
   site: SITE,
   base: BASE,
   trailingSlash: 'always',
   integrations: [
+    {
+      name: 'mermaid-script',
+      hooks: { 'astro:config:setup': ({ injectScript }) => injectScript('page', MERMAID_SCRIPT) },
+    },
     {
       // GitHub Pages serves /404.html for unknown paths, Astro writes /404/index.html.
       name: 'copy-404',
