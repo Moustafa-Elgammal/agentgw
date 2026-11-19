@@ -48,13 +48,13 @@ Run the tests: `docker compose run --rm dev make test`. To connect Claude Deskto
 
 ## Status and compatibility
 
-Version `0.x`. The pipeline, MCP endpoint, OAuth 2.1, Redis and Postgres stores, confirmations,
+Version `0.1` (before 1.0). The pipeline, MCP endpoint, OAuth 2.1, Redis and Postgres stores, confirmations,
 manifest upload and rollback, activity feed, relay, metrics, a Helm chart, optional OIDC sign-in
 at consent, the project site and seven tutorials are built and tested. Not yet: a hosted
 offering, and the relay client has only been tried with a reference C# client, not inside Unity
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
-While the version is `0.x`, the manifest format, the signed request and some protocol details
+Before 1.0, the manifest format, the signed request and some protocol details
 may still change. Every such change is recorded in [docs/DECISIONS.md](docs/DECISIONS.md) and
 the [CHANGELOG](CHANGELOG.md). Pin a version if you build on it.
 

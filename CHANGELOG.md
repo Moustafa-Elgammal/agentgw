@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-and the project follows [Semantic Versioning](https://semver.org). While the version is `0.x`,
+and the project follows [Semantic Versioning](https://semver.org). Before 1.0,
 the manifest format, the signed request and some protocol details may change in a minor release.
 Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
@@ -79,7 +79,7 @@ First public release. The date is set when the tag is cut.
 
 ### Known limits
 
-- Version `0.x`: the manifest format, the signed request and some protocol details may change in
+- Before 1.0: the manifest format, the signed request and some protocol details may change in
   a minor release. Every change has an entry in `docs/DECISIONS.md`.
 - The Unity package has not been run inside Unity. The relay was tried with the C# reference
   client and a Go client.

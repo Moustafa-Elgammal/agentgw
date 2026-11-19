@@ -23,8 +23,8 @@ It trusts the `X-Dev-Player` header by design and is documented as loopback-only
 
 | Version | Supported |
 |---|---|
-| Latest `0.x` release | Yes: security fixes and bug fixes |
-| Older `0.x` releases | No: upgrade to the latest release |
+| Latest `0.1.x` release | Yes: security fixes and bug fixes |
+| Older `0.1.x` releases | No: upgrade to the latest release |
 | `main` | Fixes land here first, but it is not a release |
 
 Until `1.0`, a fix may need a new minor release instead of a patch. Releases are signed, so verify

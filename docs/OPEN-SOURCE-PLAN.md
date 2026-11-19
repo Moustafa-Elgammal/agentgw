@@ -65,7 +65,7 @@ write only inside `release.yml`.
 ### 7.4 Releases
 
 - **Versioning.** Semantic versioning. Start at `v0.1.0` and say plainly in the README that
-  `0.x` may break manifest or protocol details, each such change with a `DECISIONS.md` entry.
+  releases before 1.0 may break manifest or protocol details, each such change with a `DECISIONS.md` entry.
   Add `CHANGELOG.md` (Keep a Changelog format), generated from conventional PR titles or written
   by hand per release.
 - **Binaries.** GoReleaser run in a container: `gateway`, `gwctl`, `gwbridge` for linux, macOS

@@ -134,7 +134,7 @@ Yes. `examples/city` is a fake backend that runs with `docker compose up`, and t
 
 ### Is it production ready?
 
-It is version `0.x`. The manifest format, the signed request and some protocol details may still
+It is a `0.1` release, before 1.0. The manifest format, the signed request and some protocol details may still
 change, and each change has an entry in [DECISIONS.md](../DECISIONS.md) and the changelog. Pin a
 version.
 
