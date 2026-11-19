@@ -17,14 +17,26 @@ inside the build containers.
 
 ## Visibility and metadata
 
+The About box on the repository page. The description is under 350 characters and each topic
+is lowercase and under 50.
+
 ```bash
 gh repo edit Moustafa-Elgammal/agentgw \
-  --description "Gateway that lets a player's AI agent act safely inside a game (MCP, policy, signed calls, audit)" \
-  --add-topic mcp --add-topic ai-agents --add-topic game-development \
-  --add-topic gateway --add-topic oauth --add-topic golang \
+  --description "Open-source gateway that lets a player's own AI agent act safely in a game: MCP tools from a manifest, policy, signed calls, audit." \
+  --homepage "https://elgx.me/agentgw/" \
+  --add-topic mcp --add-topic model-context-protocol --add-topic ai-agents \
+  --add-topic game-development --add-topic gateway --add-topic oauth \
+  --add-topic golang --add-topic rate-limiting --add-topic audit-log \
+  --add-topic websocket --add-topic kubernetes --add-topic helm \
   --enable-discussions --enable-issues --enable-wiki=false
 gh repo edit Moustafa-Elgammal/agentgw --visibility public --accept-visibility-change-consequences
 ```
+
+A shorter description for a tighter card: "Let a player's AI agent play your game safely. MCP
+gateway with policy, caps, confirmations, signed backend calls and audit."
+
+The website is the docs site. If the custom domain goes away, use the default Pages URL
+`https://moustafa-elgammal.github.io/agentgw/`.
 
 ## Branch protection on `main`
 
@@ -78,6 +90,14 @@ OIDC identity, so no signing secret is stored.
 Repeat the pre-flight and a smaller version of this list for `tinycity-mock` (private until the
 audit is clean, then public). The workspace root repository stays private.
 
+```bash
+gh repo edit Moustafa-Elgammal/tinycity-mock \
+  --description "Fictional city-builder MCP server and REST mock, used as a test game for agentgw. Not a real game." \
+  --add-topic mcp --add-topic mock-server --add-topic test-fixture \
+  --add-topic python --add-topic ai-agents
+```
+
 ## After M8
 
-Set the repository website to the Pages URL and enable Pages with the GitHub Actions source.
+Enable Pages with the GitHub Actions source. The repository website is already set in the
+metadata step above.
