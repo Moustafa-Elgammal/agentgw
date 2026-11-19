@@ -1,0 +1,8 @@
+# Adds the relay to the OAuth demo stack and swaps in a manifest with two relay tools.
+# Used by examples/unity-relay-client/e2e.sh. Dev only: the relay secret is a placeholder.
+services:
+  gateway:
+    environment:
+      - AGENTGW_RELAY_SECRET=dev-relay-secret
+    volumes:
+      - ./examples/unity-relay-client/e2e:/etc/agentgw:ro

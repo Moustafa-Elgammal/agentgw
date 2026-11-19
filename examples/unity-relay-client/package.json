@@ -1,0 +1,12 @@
+{
+  "name": "com.agentgw.relay-client",
+  "displayName": "agentgw Relay Client",
+  "version": "0.1.0",
+  "unity": "2021.3",
+  "description": "A reference client for the agentgw relay: a game opens a WebSocket to the gateway and answers the tool calls an AI agent makes for the player. Plain C#, no engine references. Not tested inside Unity.",
+  "keywords": ["agentgw", "mcp", "relay", "websocket"],
+  "license": "Apache-2.0",
+  "samples": [
+    { "displayName": "Basic", "description": "A MonoBehaviour that connects and answers two tools on the main thread.", "path": "Samples~/Basic" }
+  ]
+}
