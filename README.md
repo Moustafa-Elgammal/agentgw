@@ -3,6 +3,7 @@
 [![ci](https://github.com/Moustafa-Elgammal/agentgw/actions/workflows/ci.yml/badge.svg)](https://github.com/Moustafa-Elgammal/agentgw/actions/workflows/ci.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/Moustafa-Elgammal/agentgw.svg)](https://pkg.go.dev/github.com/Moustafa-Elgammal/agentgw)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Moustafa-Elgammal/agentgw?include_prereleases)](https://github.com/Moustafa-Elgammal/agentgw/releases)
 
 **An open-source gateway that lets a player's own AI agent act safely inside a game.**
 
@@ -48,8 +49,9 @@ Run the tests: `docker compose run --rm dev make test`. To connect Claude Deskto
 ## Status and compatibility
 
 Version `0.x`. The pipeline, MCP endpoint, OAuth 2.1, Redis and Postgres stores, confirmations,
-manifest upload and rollback, activity feed, relay, metrics, and a Helm chart are built and
-tested, including optional OIDC sign-in at consent. Open items: a hosted offering, and the docs site and guides
+manifest upload and rollback, activity feed, relay, metrics, a Helm chart, optional OIDC sign-in
+at consent, the project site and seven tutorials are built and tested. Not yet: a hosted
+offering, and the relay client has only been tried with a reference C# client, not inside Unity
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 While the version is `0.x`, the manifest format, the signed request and some protocol details

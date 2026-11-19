@@ -16,7 +16,7 @@ const BRANCH = 'main';
 const MANIFEST_FILE = path.join(OUT, '.synced.json');
 
 // docs/ files that are internal or about process. They stay in the repository only.
-const EXCLUDE = new Set(['OPEN-SOURCE-PLAN.md', 'REPO-SETTINGS.md', 'AUDIT-REPORT.md']);
+const EXCLUDE = new Set(['OPEN-SOURCE-PLAN.md', 'REPO-SETTINGS.md', 'AUDIT-REPORT.md', 'LAUNCH-CHECKLIST.md']);
 
 // Top level files, mapped to a route. Everything else under docs/<dir>/<name>.md keeps its path.
 const FILE_ROUTES = new Map([

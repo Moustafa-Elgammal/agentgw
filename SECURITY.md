@@ -21,4 +21,11 @@ It trusts the `X-Dev-Player` header by design and is documented as loopback-only
 
 ## Supported versions
 
-Pre-1.0: only the latest commit on `main` is supported.
+| Version | Supported |
+|---|---|
+| Latest `0.x` release | Yes: security fixes and bug fixes |
+| Older `0.x` releases | No: upgrade to the latest release |
+| `main` | Fixes land here first, but it is not a release |
+
+Until `1.0`, a fix may need a new minor release instead of a patch. Releases are signed, so verify
+what you run: see [docs/RELEASING.md](docs/RELEASING.md).

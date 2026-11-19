@@ -84,7 +84,8 @@ jobs:
           target: gateway
           platforms: linux/amd64,linux/arm64
           push: true
-          build-args: VERSION=${{ github.ref_name }}
+          # The same version string the binaries print (GoReleaser strips the v): 0.1.0, not v0.1.0.
+          build-args: VERSION=${{ steps.meta-agentgw.outputs.version }}
           tags: ${{ steps.meta-agentgw.outputs.tags }}
           labels: ${{ steps.meta-agentgw.outputs.labels }}
       - name: Sign agentgw by digest
@@ -118,7 +119,7 @@ jobs:
           target: bridge
           platforms: linux/amd64,linux/arm64
           push: true
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ steps.meta-agentgw-bridge.outputs.version }}
           tags: ${{ steps.meta-agentgw-bridge.outputs.tags }}
           labels: ${{ steps.meta-agentgw-bridge.outputs.labels }}
       - name: Sign agentgw-bridge by digest

@@ -13,8 +13,15 @@ pre-release: it gets a GitHub pre-release and no `latest` image tag.
 2. Run `make deploy-check workflows-check release-check` and `make release-snapshot`
    (everything runs in containers; the snapshot publishes nothing and writes `dist/`).
 3. Update `CHANGELOG.md` and commit it, signed off.
-4. Tag and push: `git tag -s v0.1.0 -m "v0.1.0" && git push origin v0.1.0`.
-5. Watch the `release` workflow. When it ends, open the release page and check the files below.
+4. Dry run first: tag a release candidate, `git tag -a v0.1.0-rc.1 -m "v0.1.0-rc.1" && git push origin v0.1.0-rc.1`.
+   A tag with a hyphen is a pre-release and gets no `latest` image tag, so it exercises the whole
+   pipeline (binaries, images, signing, SBOM, attestation) without publishing a stable release.
+   Verify it with the commands below. If it fails, delete the release, the tag and the images
+   it made, fix the workflow, and tag `rc.2`.
+5. Tag and push the real release: `git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0`.
+   A plain annotated tag needs no signing key. Releases are signed by the workflow, not by your tag.
+6. Watch the `release` workflow. When it ends, open the release page and check the files below.
+   The binaries and the images both print the version without the `v` (`0.1.0`).
 
 ## What the workflow does
 
