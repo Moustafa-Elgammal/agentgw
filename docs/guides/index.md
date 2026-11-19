@@ -16,8 +16,9 @@ fails the build.
 | [6. Go live](../tutorials/06-go-live.md) | 20 min | use Postgres and Redis, the admin key, upload, roll back, rotate keys |
 | [7. Test your integration](../tutorials/07-test-your-integration.md) | 15 min | run the conformance suite against your setup |
 | [8. Sign in with your identity provider](../tutorials/08-sign-in-with-your-identity-provider.md) | 20 min | let players sign in at consent with your OIDC login instead of a code |
-| [9. Run it on Kubernetes](../tutorials/09-run-it-on-kubernetes.md) | 25 min | install the Helm chart on a local cluster, play through two replicas, upload a manifest, kill a pod |
+| [9. Run it on Kubernetes](../tutorials/09-run-it-on-kubernetes.md) | 25 min | on a kind cluster: install the Helm chart, play through two replicas, upload a manifest, kill a pod |
 | [10. Connect a Unity game through the relay](../tutorials/10-connect-a-unity-game-through-the-relay.md) | 25 min | let an agent play a game whose rules run in the client: tickets, a WebSocket, takeover, offline |
+| [11. Run it on Docker Desktop](../tutorials/11-run-it-on-docker-desktop-kubernetes.md) | 25 min | the same as tutorial 9 on Docker Desktop's built in Kubernetes, with no image loading |
 
 ## Reference guides
 

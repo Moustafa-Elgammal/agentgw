@@ -12,7 +12,7 @@ spec:
       containers:
         - name: backend
           image: city-backend:tutorial
-          imagePullPolicy: Never   # loaded into the cluster with "kind load docker-image"
+          imagePullPolicy: IfNotPresent   # Docker Desktop serves local images; kind needs "kind load docker-image"
           env:
             - name: AGENTGW_SIGNING_SECRET
               valueFrom: { secretKeyRef: { name: agentgw-credentials, key: signing-secret } }

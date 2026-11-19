@@ -5,7 +5,7 @@ replicaCount: 2
 image:
   repository: agentgw
   tag: tutorial
-  pullPolicy: Never    # the image is loaded into the cluster, not pulled
+  pullPolicy: IfNotPresent   # a local image: served by Docker Desktop, or loaded into kind
 
 existingSecret: agentgw-credentials
 
@@ -17,6 +17,7 @@ config:
   backendURL: http://city-backend:9090
   backendAllowPrivate: true   # the backend is a ClusterIP address, which counts as private
   redisAddr: redis:6379
+  keyID: dev-1                # the key id the gateway signs with. The demo backend knows dev-1; yours will know the id you give it
   manifestPoll: 2s            # so a manifest upload shows up within seconds in this tutorial
 
 # One pod must stay up during a node drain; the chart default needs two replicas for that.

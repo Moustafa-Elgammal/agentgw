@@ -17,11 +17,9 @@ restart the deployment, and see that nothing was lost.
   and `curl` and `openssl`.
 - `kubectl` and `helm`. On macOS: `brew install kubectl helm`. Other systems: see
   [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) and [helm.sh](https://helm.sh/docs/intro/install/).
-- A **local** Kubernetes cluster that `kubectl` points at. Either:
-  - Docker Desktop with Kubernetes turned on (Settings, Kubernetes, Enable). The context is
-    `docker-desktop`.
-  - Or [kind](https://kind.sigs.k8s.io): `brew install kind`, then `kind create cluster`. The
-    context is `kind-kind`. Everything below works the same way.
+- [kind](https://kind.sigs.k8s.io) (Kubernetes in Docker): `brew install kind`. Then create a
+  cluster: `kind create cluster`. Its context is `kind-kind`. (On Docker Desktop's built in
+  Kubernetes, follow [tutorial 11](11-run-it-on-docker-desktop-kubernetes.md) instead.)
 
 Check which cluster you are about to use:
 
@@ -30,10 +28,10 @@ kubectl config current-context
 kubectl get nodes
 ```
 
-The script refuses to run unless the context is `docker-desktop`. To use another local cluster,
-set `K8S_CONTEXT`, for example `K8S_CONTEXT=kind-kind make k8s-tutorial-check`. Do not point this at
-a cluster you care about: the tutorial uses its own namespace, `agentgw-tutorial`, and deletes it at
-the end, but it also loads two images into the cluster's nodes.
+The script refuses to run unless the context is `kind-kind`. If you named your cluster something
+else, set `K8S_CONTEXT`, for example `K8S_CONTEXT=kind-demo make k8s-tutorial-check`. Do not point
+this at a cluster you care about: the tutorial uses its own namespace, `agentgw-tutorial`, and
+deletes it at the end, but it also loads two images into the cluster's nodes.
 
 ## What you are building
 
@@ -54,20 +52,22 @@ services. The demo backend is the same fake city as in the other tutorials.
 ## 1. Build the images and make the cluster see them
 
 ```bash
-docker build --target gateway -t agentgw:tutorial .
-docker build --target city-backend -t city-backend:tutorial .
+export TAG=$(date +%s)   # a new tag every time, so the cluster never keeps using an older build
+docker build --target gateway -t agentgw:$TAG .
+docker build --target city-backend -t city-backend:$TAG .
 ```
 
-Whether the cluster can see them depends on the cluster:
+A kind cluster has its own image store, separate from Docker's, so load the images into it:
 
-- A cluster whose nodes are Docker containers, which means kind and Docker Desktop in its "kind"
-  mode (the nodes are called `desktop-control-plane` and so on), has its own image store. Load the
-  images into it: `kind load docker-image agentgw:tutorial city-backend:tutorial --name <cluster>`.
-  For kind the name is `kind`. For Docker Desktop it is `desktop`. The script works this out from
-  the node name and downloads `kind` into `.tutorial-tmp/bin` if you do not have it.
-- Docker Desktop in its single node mode shares the Docker image store, so nothing needs loading.
-- A cloud cluster pulls from a registry. Push the images there and set `image.repository` and
-  `image.tag` instead.
+```bash
+kind load docker-image agentgw:$TAG city-backend:$TAG
+```
+
+(Add `--name <cluster>` if your cluster is not called `kind`.) The manifests use
+`imagePullPolicy: IfNotPresent`, so Kubernetes uses the loaded image and never looks for
+`agentgw:<tag>` on a public registry. A cloud cluster pulls from a registry instead: push the
+images there and set `image.repository` and `image.tag`. On Docker Desktop's Kubernetes no loading
+is needed, see [tutorial 11](11-run-it-on-docker-desktop-kubernetes.md).
 
 ## 2. The namespace and the Secret
 
@@ -92,9 +92,12 @@ manifest uploads and is a different key on purpose.
 ## 3. Postgres, Redis and the backend
 
 ```bash
-kubectl apply -f examples/tutorials/k8s/data.yaml -f examples/tutorials/k8s/backend.yaml
+kubectl apply -f examples/tutorials/k8s/data.yaml
+sed "s#city-backend:tutorial#city-backend:$TAG#" examples/tutorials/k8s/backend.yaml | kubectl apply -f -
 kubectl -n agentgw-tutorial rollout status deploy/postgres deploy/redis deploy/city-backend --timeout=180s
 ```
+
+The `sed` puts this run's image tag into the backend manifest, the same tag you built above.
 
 The backend reads the same Secret, so it can verify the gateway's signatures.
 
@@ -115,6 +118,7 @@ The manifest itself comes from the repository's demo, as a file, not from the va
 ```bash
 helm install agentgw deploy/helm/agentgw --namespace agentgw-tutorial \
   -f examples/tutorials/k8s/values.yaml \
+  --set image.tag=$TAG \
   --set-file manifest=examples/city/manifest.yaml \
   --wait --timeout 180s
 kubectl -n agentgw-tutorial get pods -l app.kubernetes.io/name=agentgw

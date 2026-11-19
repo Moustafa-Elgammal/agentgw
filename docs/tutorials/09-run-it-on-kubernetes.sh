@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Verifies tutorial 09 (docs/tutorials/09-run-it-on-kubernetes.md). Run from the repository root:
 #   bash docs/tutorials/09-run-it-on-kubernetes.sh
-# Needs Docker, kubectl, helm, curl and openssl, and a local Kubernetes cluster that kubectl already
-# points at (Docker Desktop with Kubernetes enabled, kind, minikube). It refuses to run unless the
-# current kubectl context is docker-desktop; set K8S_CONTEXT to use another local cluster:
+# Needs Docker, kubectl, helm, kind, curl and openssl, and a kind cluster that kubectl already
+# points at (kind create cluster). It refuses to run unless the current kubectl context is kind-kind;
+# set K8S_CONTEXT if your cluster has another name:
 #   K8S_CONTEXT=kind-agentgw bash docs/tutorials/09-run-it-on-kubernetes.sh
 # Everything goes into one namespace (agentgw-tutorial), which the script deletes on exit. It
 # refuses to start if that namespace already exists, so it never deletes something of yours.
@@ -28,7 +28,7 @@ case "$(uname -m)" in x86_64 | amd64) ARCH=amd64 ;; aarch64 | arm64) ARCH=arm64 
 # --- the commands below are the ones the tutorial shows ---------------------------------
 
 step "1. Check which cluster kubectl points at, and that the namespace is free"
-WANT_CONTEXT="${K8S_CONTEXT:-docker-desktop}"
+WANT_CONTEXT="${K8S_CONTEXT:-kind-kind}"
 CONTEXT=$(kubectl config current-context 2>/dev/null || true)
 echo "kubectl context: ${CONTEXT:-none}"
 [ "$CONTEXT" = "$WANT_CONTEXT" ] || fail "kubectl points at '${CONTEXT:-none}', not '$WANT_CONTEXT'. Switch with: kubectl config use-context $WANT_CONTEXT (or set K8S_CONTEXT)"
@@ -59,23 +59,13 @@ forward() { # forward SERVICE LOCAL:REMOTE : port-forward in the background and 
 }
 
 step "2. Build the gateway and the demo backend, and make sure the cluster can see them"
-docker build -q --target gateway -t agentgw:tutorial .
-docker build -q --target city-backend -t city-backend:tutorial .
-# A cluster whose nodes are Docker containers (kind, and Docker Desktop's "kind" mode) has its own
-# image store, so the images have to be loaded into it. A single node Docker Desktop cluster shares
-# the Docker image store, and a cluster in the cloud would pull from a registry instead.
-NODE=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}')
-if docker inspect "$NODE" >/dev/null 2>&1; then
-  KIND_CLUSTER=${NODE%-control-plane}
-  command -v kind >/dev/null || {
-    echo "kind is not installed: downloading it into $BIN"
-    curl -sSfL -o "$BIN/kind" "https://kind.sigs.k8s.io/dl/v0.25.0/kind-$OS-$ARCH"
-    chmod +x "$BIN/kind"
-  }
-  kind load docker-image agentgw:tutorial city-backend:tutorial --name "$KIND_CLUSTER"
-else
-  echo "the cluster shares the Docker image store: nothing to load"
-fi
+export TAG=$(date +%s)   # a new tag every time, so the cluster never keeps using an older build
+docker build -q --target gateway -t agentgw:$TAG .
+docker build -q --target city-backend -t city-backend:$TAG .
+# A kind cluster has its own image store, so load the images into it. The manifests use
+# imagePullPolicy IfNotPresent, so Kubernetes uses the loaded image.
+command -v kind >/dev/null || fail "kind is not installed (brew install kind)"
+kind load docker-image agentgw:$TAG city-backend:$TAG --name "${CONTEXT#kind-}"
 
 step "3. Make the namespace and the Secret (the chart never takes secrets inline)"
 kubectl apply -f examples/tutorials/k8s/namespace.yaml
@@ -89,12 +79,14 @@ kubectl -n agentgw-tutorial create secret generic agentgw-credentials \
 expect "$(kubectl -n agentgw-tutorial get secret agentgw-credentials -o jsonpath='{.data}')" "signing-secret"
 
 step "4. Start Postgres, Redis and the demo backend"
-kubectl apply -f examples/tutorials/k8s/data.yaml -f examples/tutorials/k8s/backend.yaml
+kubectl apply -f examples/tutorials/k8s/data.yaml
+sed "s#city-backend:tutorial#city-backend:$TAG#" examples/tutorials/k8s/backend.yaml | kubectl apply -f -
 kubectl -n agentgw-tutorial rollout status deploy/postgres deploy/redis deploy/city-backend --timeout=180s
 
 step "5. Install the chart"
 helm install agentgw deploy/helm/agentgw --namespace agentgw-tutorial \
   -f examples/tutorials/k8s/values.yaml \
+  --set image.tag=$TAG \
   --set-file manifest=examples/city/manifest.yaml \
   --wait --timeout 180s
 PODS=$(kubectl -n agentgw-tutorial get pods -l app.kubernetes.io/name=agentgw)
@@ -102,6 +94,8 @@ echo "$PODS"
 expect "$PODS" "1/1"
 READY=$(kubectl -n agentgw-tutorial get deploy agentgw -o jsonpath='{.status.readyReplicas}')
 [ "$READY" = 2 ] || fail "want 2 ready replicas, got $READY"
+RESTARTS=$(kubectl -n agentgw-tutorial get pods -l app.kubernetes.io/name=agentgw -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{"\n"}{end}' | awk '{s+=$1} END{print s+0}')
+[ "$RESTARTS" = 0 ] || fail "a gateway pod restarted $RESTARTS times while starting (two replicas migrating the schema at once used to do this)"
 
 step "6. The ops port answers: health, readiness, metrics"
 forward agentgw-ops "$OPS_PORT:9090"

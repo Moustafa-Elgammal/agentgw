@@ -42,10 +42,10 @@ for f in "$dir"/[0-9][0-9]-*.sh; do
   if [ -n "$only" ] && [ "${n:0:2}" != "$only" ]; then
     continue
   fi
-  # Tutorial 9 needs a Kubernetes cluster, which most machines and the guides workflow do not have.
-  # Run it with `make k8s-tutorial-check` (or --only 09).
-  if [ -z "$only" ] && [ "${n:0:2}" = "09" ]; then
-    echo "run-all: skipping $n (needs a Kubernetes cluster: make k8s-tutorial-check)"
+  # Tutorials 9 and 11 need a Kubernetes cluster, which most machines and the guides workflow do
+  # not have. Run them with `make k8s-tutorial-check` (kind) or `make k8s-docker-desktop-check`.
+  if [ -z "$only" ] && { [ "${n:0:2}" = "09" ] || [ "${n:0:2}" = "11" ]; }; then
+    echo "run-all: skipping $n (needs a Kubernetes cluster: make k8s-tutorial-check or k8s-docker-desktop-check)"
     continue
   fi
   scripts+=("$f")

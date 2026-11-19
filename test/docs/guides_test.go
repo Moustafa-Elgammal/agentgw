@@ -66,6 +66,7 @@ func TestTutorialsAreComplete(t *testing.T) {
 		"01-play-the-example-game", "02-describe-your-actions", "03-accept-signed-calls",
 		"04-link-a-player", "05-ask-before-big-actions", "06-go-live", "07-test-your-integration", "08-sign-in-with-your-identity-provider",
 		"10-connect-a-unity-game-through-the-relay",
+		"11-run-it-on-docker-desktop-kubernetes",
 	}
 	for _, name := range planned {
 		md := filepath.Join(root, "docs", "tutorials", name+".md")

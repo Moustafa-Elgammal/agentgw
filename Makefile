@@ -1,4 +1,4 @@
-.PHONY: oidc-keycloak-check k8s-tutorial-check guides-check guides-lint site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen site-lint site-spell site-a11y site-dashes docs-quality
+.PHONY: oidc-keycloak-check k8s-tutorial-check k8s-docker-desktop-check guides-check guides-lint site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen site-lint site-spell site-a11y site-dashes docs-quality
 
 all: fmt vet test build
 
@@ -106,10 +106,14 @@ oidc-keycloak-check:
 guides-check:
 	bash docs/tutorials/run-all.sh
 
-# Tutorial 9 on the local Kubernetes cluster kubectl points at (docker-desktop unless K8S_CONTEXT is
-# set). Needs kubectl and helm. Uses its own namespace and deletes it afterwards.
+# Tutorial 9 on the kind cluster kubectl points at (kind-kind unless K8S_CONTEXT is set). Needs
+# kubectl, helm and kind. Uses its own namespace and deletes it afterwards.
 k8s-tutorial-check:
 	bash docs/tutorials/09-run-it-on-kubernetes.sh
+
+# Tutorial 11: the same on Docker Desktop's Kubernetes (context docker-desktop).
+k8s-docker-desktop-check:
+	bash docs/tutorials/11-run-it-on-docker-desktop-kubernetes.sh
 
 # Documentation quality gates, all in containers (see AGENTS.md). docs-quality runs every one.
 site-lint:

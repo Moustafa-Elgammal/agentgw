@@ -62,6 +62,7 @@ const EXPECTED = new Map([
   ['docs/tutorials/08-sign-in-with-your-identity-provider.md', '8. Sign in with your identity provider'],
   ['docs/tutorials/09-run-it-on-kubernetes.md', '9. Run it on Kubernetes'],
   ['docs/tutorials/10-connect-a-unity-game-through-the-relay.md', '10. Connect a Unity game through the relay'],
+  ['docs/tutorials/11-run-it-on-docker-desktop-kubernetes.md', '11. Run it on Docker Desktop'],
 ]);
 
 // Title overrides, by route, where the H1 would be ambiguous in the sidebar.
@@ -74,6 +75,7 @@ const ORDER = [
   'guides/07-test-your-integration', 'guides/08-sign-in-with-your-identity-provider',
   'guides/09-run-it-on-kubernetes',
   'guides/10-connect-a-unity-game-through-the-relay',
+  'guides/11-run-it-on-docker-desktop-kubernetes',
   'guides/best-practices', 'guides/cookbook', 'guides/troubleshooting', 'guides/faq',
   'get-started/overview', 'get-started/quickstart', 'get-started/connect-an-agent', 'get-started/claude-desktop', 'get-started/glossary',
   'concepts/pipeline', 'concepts/tiers-and-policy', 'concepts/players-grants-confirmations',
