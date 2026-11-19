@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -200,5 +201,76 @@ func TestConcurrentIdenticalRequestsOneWins(t *testing.T) {
 	wg.Wait()
 	if wins.Load() != 1 || replays.Load() != n-1 {
 		t.Fatalf("wins=%d replays=%d", wins.Load(), replays.Load())
+	}
+}
+
+func TestKeyRotation(t *testing.T) {
+	c := newClock()
+	v := studiosig.New(studiosig.Config{Keys: map[string][]byte{"old": []byte("s-old")}, Now: c.now})
+	sign := func(id string, sec []byte, idem string) *http.Request {
+		r := httptest.NewRequest("GET", "/v1/studio/x", nil)
+		agentsig.Sign(r, id, sec, "alice", idem, nil, c.now())
+		return r
+	}
+	if _, err := verify(v, sign("old", []byte("s-old"), "a1")); err != nil {
+		t.Fatalf("old key before rotation: %v", err)
+	}
+	// Overlap: both keys accepted.
+	v.SetKeys(map[string][]byte{"old": []byte("s-old"), "new": []byte("s-new")})
+	if _, err := verify(v, sign("new", []byte("s-new"), "a2")); err != nil {
+		t.Fatalf("new key during overlap: %v", err)
+	}
+	if _, err := verify(v, sign("old", []byte("s-old"), "a3")); err != nil {
+		t.Fatalf("old key during overlap: %v", err)
+	}
+	// A captured request is still a replay after rotation.
+	if _, err := verify(v, sign("new", []byte("s-new"), "a2")); !errors.Is(err, studiosig.ErrReplay) {
+		t.Fatalf("replay across SetKeys = %v", err)
+	}
+	// Retire the old key.
+	v.SetKeys(map[string][]byte{"new": []byte("s-new")})
+	if _, err := verify(v, sign("old", []byte("s-old"), "a4")); !errors.Is(err, studiosig.ErrUnauthorized) {
+		t.Fatalf("retired key = %v", err)
+	}
+	// Right id, wrong secret, and empty sets accept nothing.
+	if _, err := verify(v, sign("new", []byte("nope"), "a5")); !errors.Is(err, studiosig.ErrUnauthorized) {
+		t.Fatalf("wrong secret = %v", err)
+	}
+	v.SetKeys(nil)
+	if _, err := verify(v, sign("new", []byte("s-new"), "a6")); !errors.Is(err, studiosig.ErrUnauthorized) {
+		t.Fatalf("empty key set = %v", err)
+	}
+}
+
+func TestLoadKeys(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) string {
+		p := dir + "/k.json"
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	tests := []struct {
+		name, body string
+		ok         bool
+	}{
+		{"two keys", `{"a":"x","b":"y"}`, true},
+		{"empty object", `{}`, false},
+		{"empty secret", `{"a":""}`, false},
+		{"empty id", `{"":"x"}`, false},
+		{"not json", `a=b`, false},
+		{"wrong shape", `{"a":1}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := studiosig.LoadKeys(write(tt.body))
+			if (err == nil) != tt.ok {
+				t.Errorf("err = %v, want ok=%v", err, tt.ok)
+			}
+		})
+	}
+	if _, err := studiosig.LoadKeys(dir + "/missing.json"); err == nil {
+		t.Error("missing file must error")
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Moustafa-Elgammal/agentgw/pkg/agentsig"
@@ -32,6 +33,9 @@ var (
 type Config struct {
 	KeyID  string
 	Secret []byte
+	// Keys are extra accepted keys (id to secret), for rotation. KeyID and Secret, when set,
+	// are one more entry. Replace the whole set at runtime with SetKeys.
+	Keys map[string][]byte
 	// Now is the clock. Nil means time.Now.
 	Now func() time.Time
 	// MaxSkew is how far a request timestamp may be from the clock. Zero means
@@ -41,6 +45,8 @@ type Config struct {
 	// after expired entries are dropped, new requests fail closed with ErrBusy.
 	// Existing entries are never evicted early, because that would reopen replay.
 	MaxEntries int
+	// MaxBody caps the request body. Zero means MaxBody (64 KiB). Manifest uploads need more.
+	MaxBody int64
 }
 
 type entry struct {
@@ -51,11 +57,11 @@ type entry struct {
 // Verifier verifies studio-signed requests and refuses replays. It is safe for
 // concurrent use. Share one instance between every handler that uses the same key.
 type Verifier struct {
-	keyID   string
-	secret  []byte
+	keys    atomic.Pointer[map[string][]byte]
 	now     func() time.Time
 	skew    time.Duration
 	max     int
+	maxBody int64
 	mu      sync.Mutex
 	seen    map[string]struct{}
 	pending []entry // FIFO by insertion time, so expiry is non-decreasing
@@ -63,8 +69,16 @@ type Verifier struct {
 
 // New builds a Verifier.
 func New(cfg Config) *Verifier {
-	v := &Verifier{keyID: cfg.KeyID, secret: cfg.Secret, now: cfg.Now, skew: cfg.MaxSkew,
-		max: cfg.MaxEntries, seen: map[string]struct{}{}}
+	v := &Verifier{now: cfg.Now, skew: cfg.MaxSkew,
+		max: cfg.MaxEntries, maxBody: cfg.MaxBody, seen: map[string]struct{}{}}
+	keys := map[string][]byte{}
+	for id, sec := range cfg.Keys {
+		keys[id] = sec
+	}
+	if cfg.KeyID != "" {
+		keys[cfg.KeyID] = cfg.Secret
+	}
+	v.SetKeys(keys)
 	if v.now == nil {
 		v.now = time.Now
 	}
@@ -74,7 +88,24 @@ func New(cfg Config) *Verifier {
 	if v.max <= 0 {
 		v.max = DefaultMaxEntries
 	}
+	if v.maxBody <= 0 {
+		v.maxBody = MaxBody
+	}
 	return v
+}
+
+// SetKeys atomically replaces the accepted keys (id to secret). Rotation is: add the new key,
+// move the studio to it, then remove the old one. Entries with an empty secret are dropped, so
+// an empty set accepts nothing. The replay cache is kept: it is keyed by key id and idempotency
+// key, so a rotation never reopens a replay.
+func (v *Verifier) SetKeys(keys map[string][]byte) {
+	m := make(map[string][]byte, len(keys))
+	for id, sec := range keys {
+		if id != "" && len(sec) > 0 {
+			m[id] = append([]byte(nil), sec...)
+		}
+	}
+	v.keys.Store(&m)
 }
 
 // Verify reads the body (at most MaxBody), checks the signature, requires a
@@ -84,14 +115,14 @@ func New(cfg Config) *Verifier {
 // replays it. The pair is recorded only after the signature verified, so a caller
 // who cannot sign cannot fill or poison the cache.
 func (v *Verifier) Verify(w http.ResponseWriter, r *http.Request) (player string, body []byte, err error) {
-	body, err = io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
+	body, err = io.ReadAll(http.MaxBytesReader(w, r.Body, v.maxBody))
 	if err != nil {
 		return "", nil, ErrTooLarge
 	}
 	now := v.now()
 	player, err = agentsig.Verify(r, body, func(id string) []byte {
-		if id == v.keyID && len(v.secret) > 0 {
-			return v.secret
+		if sec := (*v.keys.Load())[id]; len(sec) > 0 {
+			return sec
 		}
 		return nil
 	}, now, v.skew)
