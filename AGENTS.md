@@ -76,7 +76,7 @@ transport is stateless on purpose: identity is resolved per request, never carri
 9. Anything that needs a service or tool gets a Dockerfile target or compose service. Never ask
    the user to install it on the host.
 
-## Current focus: M10 built (pilot readiness) (see `docs/ROADMAP.md`)
+## Current focus: M12 (audit and integration hardening) (see `docs/ROADMAP.md`)
 
 M10: `internal/switchapi` (admin-signed kill switches), `--max-scope`, `internal/bodylimit` (`--max-body`).
 

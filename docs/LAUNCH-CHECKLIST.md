@@ -68,11 +68,13 @@ undone by deleting it: publish `v0.1.1` and mark the bad release as a pre-releas
 - Enable Discussions categories (Q&A, Ideas, Show and tell) and pin two or three
   `good first issue` issues.
 - Make the `tinycity-mock` repository public after the same audit, and update its README link.
+- Have one person who has not seen the project follow the quickstart and the first tutorials, and
+  fix what slows them down.
+- Record a short terminal demo for the site's landing page.
 - Announce it, once, where MCP and game developers read.
 
 ## Not covered by any local check
 
 - The release workflow itself, and every action version Dependabot bumped.
 - The relay inside Unity (the C# client has been tested outside Unity only).
-- The audit batching writer under a long soak.
 - A first-time reader following the guides without help.
