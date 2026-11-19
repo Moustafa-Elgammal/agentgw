@@ -550,12 +550,12 @@ and the new key during the overlap.
 - **Two alerts.** `AgentgwPostgresPoolSaturated` needs the pool above 90% in use and calls
   waiting for 5 minutes. `AgentgwGoroutinesGrowing` needs over 1000 goroutines and a steady climb.
 
-## OIDC at consent (proposed)
+## OIDC at consent (M3)
 
 Full design: [design/oidc-consent.md](design/oidc-consent.md).
 
 A studio can let players sign in with its own OIDC identity provider at the consent page, as an
-alternative to the link code. It is built behind an interface and dormant by default.
+alternative to the link code. It is off unless `--oidc-issuer` is set.
 
 - **Split on purpose.** The standard library part is built and tested: discovery, the
   authorization redirect with PKCE, `state` and `nonce`, an AES-256-GCM sealed session cookie
@@ -576,15 +576,25 @@ alternative to the link code. It is built behind an interface and dormant by def
 - **Fail closed.** Any failure ends without a grant. An untrustworthy session (no cookie,
   tampered, expired, wrong state, replayed) redirects nowhere. Verification failures reach the
   agent only as `access_denied`.
-- **Not decided yet:** the flags (`--oidc-issuer`, `--oidc-client-id`, `AGENTGW_OIDC_CLIENT_SECRET`,
-  `AGENTGW_OIDC_SESSION_SECRET`, `--oidc-player-claim`, `--oidc-scopes`) are not wired, so no flag
-  exists that does nothing.
-
-**Question for the maintainer: which signature verifier do we use?**
-
-1. **`go-oidc/v3` plus `go-jose/v4`** (recommended): two permissively licensed dependencies, used
-   only inside a small adapter. `golang.org/x/oauth2` is already an indirect dependency.
-2. **An in-house verifier** on the standard library: no dependency, about 300 to 400 lines of
-   security-critical code that only this project reviews.
-3. **No OIDC in the gateway**: studios that want SSO put an OIDC-aware proxy in front of their own
-   login page, which keeps minting link tickets as today.
+- **The verifier is `go-oidc/v3` plus `go-jose/v4`.** Of three options (those two libraries, an
+  in-house verifier, or no OIDC in the gateway behind a proxy), the libraries won: signature checks
+  against rotating keys are where hand-written code fails, and both are Apache-2.0. They are used
+  only inside `internal/auth/oidc/verifier_goidc.go`. `golang.org/x/oauth2` moved from an indirect
+  dependency to v0.36.0 with them. The adapter accepts only the algorithms in `--oidc-algs`
+  (default RS256 and ES256; `none` and the HS family are refused at start), does not follow
+  redirects, and requires an https issuer unless `--oidc-allow-insecure-http` is set for a
+  loopback provider. `Flow` still checks the nonce, `azp` and token age itself, because the
+  library does not.
+- **Flags and secrets.** `--oidc-issuer` turns it on. `--oidc-client-id`, `--oidc-player-claim`
+  (default `sub`), `--oidc-scopes` and `--oidc-algs` tune it. The client secret and the session
+  secret come only from `AGENTGW_OIDC_CLIENT_SECRET` and `AGENTGW_OIDC_SESSION_SECRET` (at least 32
+  bytes), never from flags. Helm: the `oidc` values, with both secrets read from `existingSecret`.
+- **Fail at start, not at the sign-in button.** The gateway discovers the provider at start and
+  refuses to run if a secret is missing, the algorithm list is unsafe, the provider is unreachable
+  or its document names a different issuer. Settings given without `--oidc-issuer`, or
+  `--oidc-issuer` with `--dev-auth` (which has no consent page), are also start errors.
+- **Tested end to end against a fake provider with real keys**, through the same `buildOIDC` that
+  `main` calls: client registration, the redirect, the code exchange with PKCE and the client
+  secret, the ID token signature, and the token exchange. A token signed by an unpublished key and
+  a callback without the starting browser's cookie both end without a grant. Not yet tested against
+  a real provider such as Dex or Keycloak.

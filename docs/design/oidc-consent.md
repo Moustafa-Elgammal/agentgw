@@ -1,7 +1,7 @@
 # Design: OIDC sign-in at the consent page
 
-Status: **proposed**. Everything except the ID token signature check is built and tested. One
-decision about a dependency is waiting for the maintainer (see "Recommendation").
+Status: **built** (M3). Option (i), the `go-oidc` verifier, was chosen; see "Decision". Run it with
+the [runbook section](../RUNBOOK.md#sign-in-with-your-identity-provider-oidc).
 
 ## What it is for
 
@@ -173,8 +173,7 @@ Register `<public-url>/authorize/oidc/callback` at the IdP as the redirect URI.
 
 ## Implementation options
 
-The signature check is the one part not written, because it is the part where homegrown code goes
-wrong: algorithm confusion, trusting the token's own `kid` or `jwk`, tiny keys, bad curve points,
+The signature check is the part where homegrown code goes wrong: algorithm confusion, trusting the token's own `kid` or `jwk`, tiny keys, bad curve points,
 a JWKS cache that can be poisoned or never refreshes. Three ways to get it:
 
 | | (i) `go-oidc` verifier | (ii) In-house verifier | (iii) Reverse proxy |
@@ -186,37 +185,26 @@ a JWKS cache that can be poisoned or never refreshes. Three ways to get it:
 | Fits the "few dependencies" rule | Adds two, with a reason | Yes | Yes |
 | Gives the player a sign-in button on the consent page | Yes | Yes | No, the flow lives in the studio's page |
 
-### Recommendation
+### Decision
 
-**Option (i).** Verifying a signature against rotating keys is exactly where a project should rely
+**Option (i), chosen.** Verifying a signature against rotating keys is exactly where a project should rely
 on a reviewed library, and the two dependencies are permissively licensed. Everything else (flow,
 state, nonce, PKCE, claim checks, player mapping, cookie, handlers) is already ours and tested, so
 the library is confined to one small adapter:
 
-```go
-// internal/auth/oidc/goidc (sketch, not built)
-func New(ctx context.Context, issuer, clientID string) (oidc.Verifier, error) {
-	p, err := goidc.NewProvider(ctx, issuer)
-	if err != nil { return nil, err }
-	v := p.Verifier(&goidc.Config{ClientID: clientID, SupportedSigningAlgs: []string{"RS256", "ES256"}})
-	return verifierFunc(func(ctx context.Context, raw, nonce string) (oidc.Claims, error) {
-		t, err := v.Verify(ctx, raw)          // signature, issuer, audience, exp
-		if err != nil { return oidc.Claims{}, err }
-		var raws map[string]any
-		_ = t.Claims(&raws)                   // all claims, for the player claim
-		return oidc.Claims{Issuer: t.Issuer, Subject: t.Subject, Audience: t.Audience,
-			Nonce: t.Nonce, Expiry: t.Expiry, IssuedAt: t.IssuedAt, Raw: raws}, nil
-	}), nil
-}
-```
+The adapter is `internal/auth/oidc/verifier_goidc.go` (`NewGoOIDCVerifier`). It is a little larger
+than the first sketch because it also pins the algorithm list, refuses redirects and plain http
+issuers, and maps every library error to the flow's own error values.
 
 `go-oidc` does not check the nonce itself; `CheckClaims` does. Option (iii) remains the right
 answer for a studio that wants no IdP integration in the gateway at all.
 
 ## What is built
 
-In `internal/auth/oidc` (standard library only, no new dependency):
+In `internal/auth/oidc`:
 
+- `GoOIDCVerifier`, the go-oidc adapter: discovery, JWKS fetch and rotation, and the signature
+  check against an allow-list of asymmetric algorithms. This is the only code that imports go-oidc.
 - `Verifier` and `Config`; `CheckClaims`; `PlayerID`.
 - `Flow` with `Begin` and `Complete`: discovery (cached, issuer checked), PKCE, `state` and
   `nonce`, the AES-GCM session cookie, the code exchange (client secret as Basic auth, no
@@ -232,11 +220,21 @@ In `internal/auth`:
 - Tests with a fake flow for the consent page, open redirect, CSRF, replay, denial, scope under
   the coach cap, the rate limit, and an end to end sign-in that yields a grant and tokens.
 
+In `cmd/gateway`:
+
+- `buildOIDC` turns the `--oidc-*` flags and the two secrets into a `Flow` and checks everything
+  at start (secrets present, algorithm list safe, provider reachable, issuer matches its own
+  document). `RedirectURL` is the public URL plus `auth.OIDCCallbackPath`. The flow is passed as
+  `auth.ServerConfig.OIDC`; with no `--oidc-issuer` it stays nil and the two routes answer 404.
+- Tests: the start checks, and an end to end sign-in through `buildOIDC` against a fake provider
+  with real RSA keys that checks the client secret and PKCE verifier at its token endpoint. It also
+  covers a token signed by an unpublished key and a callback without the starting browser's cookie.
+
+In the Helm chart: the `oidc` values, with both secrets read from `existingSecret`.
+
 ## What is not built
 
-- The real `Verifier` (option (i), (ii) or none for (iii)).
-- The flags above, and the wiring in `cmd/gateway`: build `oidc.Config` with
-  `RedirectURL = public URL + auth.OIDCCallbackPath`, call `oidc.NewFlow(cfg, verifier, nil, nil)`,
-  and pass the result as `auth.ServerConfig.OIDC`. Until then the feature is dormant and the two
-  routes answer 404.
-- A tutorial, and a test against a real IdP (for example a Dex container).
+- A tutorial.
+- A test against a real provider (for example a Dex container). The fake provider proves the
+  protocol and the checks; it cannot prove a given vendor's quirks, such as which claim carries a
+  stable player id or how it rotates keys.

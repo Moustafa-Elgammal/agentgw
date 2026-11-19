@@ -18,13 +18,14 @@ What is built today and where it lives in the code. The roadmap is in [ROADMAP.m
 | Studio kill switch API: switch a tool, a player or the game off and on, audited (admin-signed) | `internal/switchapi` |
 | MCP endpoint: tools from the manifest, one server per authenticated request, sensitive tools hidden | `internal/mcpserver` |
 | OAuth 2.1 resource server and embedded authorization server (PKCE, DCR, link tickets, consent, grants, revocation) | `internal/auth` |
+| OIDC sign-in at consent: discovery, PKCE, nonce, signature check with go-oidc, sealed session cookie, claim to player mapping | `internal/auth/oidc`, `cmd/gateway/oidc.go` |
 | Versioned manifests: upload, list, roll back, hot swap, replica sync (admin-signed, memory or Postgres) | `internal/manifeststore`, `internal/manifeststore/pgstore` |
 | Studio key rotation: key sets, key files, reload on SIGHUP | `internal/studiosig` |
 | Optional batched audit writes: bounded queue, one `COPY` per batch, drop-and-count overflow, drained on shutdown (`--audit-queue`) | `internal/audit` (`Batcher`), `internal/audit/pgstore` |
 | Activity feed: what a player's agents did, player and admin views, retention (memory or Postgres) | `internal/activity`, `internal/audit/pgstore` |
 | Manifest CLI | `cmd/gwctl` |
 
-Not yet: OIDC login at consent (the flow is built behind an interface and waits for a decision on the signature verifier; see [the design](design/oidc-consent.md)). Set `--postgres-url` to
+Optional sign in with the studio's own OIDC identity provider at the consent page (`--oidc-issuer`; see [the design](design/oidc-consent.md) and the [runbook](RUNBOOK.md#sign-in-with-your-identity-provider-oidc)). Set `--postgres-url` to
 keep clients, grants and approvals across restarts.
 With `--dev-auth` (the compose demo) the dev HTTP API and the MCP endpoint take the player from a
 header and must stay on loopback.

@@ -67,6 +67,7 @@ Secrets are environment variables, never flags:
 | `AGENTGW_ADMIN_SECRET` | no | turns on the manifest endpoints and the admin feed (with `--admin-keys-file`) |
 | `AGENTGW_RELAY_SECRET` | no | turns on the relay (ticket minting and `/v1/relay/connect`) |
 | `AGENTGW_POSTGRES_URL`, `AGENTGW_REDIS_ADDR` | no | same as the flags |
+| `AGENTGW_OIDC_CLIENT_SECRET`, `AGENTGW_OIDC_SESSION_SECRET` | with `--oidc-issuer` | the client secret registered at the identity provider, and a key of at least 32 bytes that seals the sign-in cookie. See [Sign in with your identity provider](#sign-in-with-your-identity-provider-oidc) |
 
 Logs are JSON on stderr. Secrets, key ids with secrets, tokens and tool arguments are never
 logged; audit stores a hash of arguments.
@@ -193,6 +194,51 @@ connections after 120 seconds idle.
 | `rate_limited` rising | an agent is looping, or limits are too tight | Look at the activity feed for the player; consider a kill switch for the tool |
 | `AgentgwPostgresPoolSaturated`, slow audit or confirmation writes | every pooled Postgres connection is in use and callers wait | Look at the "Postgres pool" panels: `acquired` at the cap and a rising wait rate. Raise `--postgres-max-conns` (stay under the database's `max_connections`, counting every replica), look for slow queries in Postgres, or add a replica. Connections that level off at the cap are normal, not a leak |
 | `AgentgwGoroutinesGrowing` | a leak, or a dependency that stopped answering so work piles up | Check `relay_connections` and backend latency first. A steady climb with flat traffic is a leak: restart the replica and keep the heap and goroutine panels for the bug report |
+
+## Sign in with your identity provider (OIDC)
+
+By default a player proves who they are at the consent page with a link code from the studio's
+backend. If the studio already runs an OIDC identity provider (IdP), the consent page can offer a
+second way: **Sign in with your game account**. It is off until `--oidc-issuer` is set. The design
+and its checks are in [design/oidc-consent.md](design/oidc-consent.md).
+
+1. At the IdP, register a confidential client. The redirect URI is the gateway's public URL plus
+   `/authorize/oidc/callback`, for example `https://gw.example.com/authorize/oidc/callback`, and it
+   must match `--public-url` exactly.
+2. Pick the claim that carries the player id your game uses. It must never change for a person
+   and must match the id the game backend knows: use `sub` or a custom claim, not an email address
+   or a display name. Set it with `--oidc-player-claim` (default `sub`).
+3. Start the gateway with the issuer and client id, and the secrets in the environment:
+
+   ```bash
+   export AGENTGW_OIDC_CLIENT_SECRET='<client secret from the IdP>'
+   export AGENTGW_OIDC_SESSION_SECRET="$(openssl rand -base64 48)"
+   gateway ... --public-url=https://gw.example.com \
+     --oidc-issuer=https://login.example.com --oidc-client-id=agentgw
+   ```
+
+   Helm: set `oidc.issuer`, `oidc.clientId`, `oidc.playerClaim`, and put `oidc-client-secret` and
+   `oidc-session-secret` in the `existingSecret`.
+4. Check the log for `oidc sign-in enabled` (it names the issuer, claim and callback, never a
+   secret), then open the consent page. The sign-in button is there.
+
+What to know:
+
+- **The gateway checks at start.** It refuses to run if a secret is missing or the session secret
+  is under 32 bytes, if the algorithm list is unsafe (`none` and the HS family are refused), if the
+  IdP cannot be reached, or if its discovery document names a different issuer. A wrong issuer shows
+  up at deploy time, not when a player clicks. OIDC flags without `--oidc-issuer`, and
+  `--oidc-issuer` with `--dev-auth`, are also start errors.
+- **Algorithms.** `--oidc-algs` defaults to `RS256,ES256`. Keys rotate at the IdP without a
+  restart.
+- **Every replica uses the same `AGENTGW_OIDC_SESSION_SECRET`.** The sign-in state lives in a
+  sealed cookie, so the callback may land on any replica. Changing the secret only fails sign-ins
+  that are in progress; those players start again. Nobody is signed out.
+- **A failed sign-in never grants anything.** The agent sees `access_denied` and nothing more.
+  The reason (bad signature, wrong audience, missing player claim) is in the gateway log.
+- **`--max-scope coach` still applies.** Players who sign in through the IdP can grant coach only.
+- **Local testing** with an IdP on `http://127.0.0.1`: add `--oidc-allow-insecure-http`. Never in
+  production.
 
 ## Secrets and key rotation
 

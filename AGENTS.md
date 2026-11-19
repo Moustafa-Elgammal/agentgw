@@ -106,7 +106,7 @@ built and tested, with the scripted PKCE conformance test in `test/conformance/a
 prunes expired OAuth rows hourly, and mounts `StudioHandler`.
 
 Studio-signed confirmation endpoints (`confirm.StudioHandler`) are the player's approve and deny path
-in OAuth mode. Still open: OIDC login at consent (library choice pending), a shared replay cache across
+in OAuth mode. OIDC login at consent is built (`internal/auth/oidc`, `cmd/gateway/oidc.go`, `--oidc-*` flags; go-oidc does the signature check). Still open: a shared replay cache across
 replicas (studio-signed requests are replay checked per process by `internal/studiosig`, one
 verifier shared by every studio endpoint). Registration limits, trusted client
 address header and narrow CORS are done (`--register-per-hour`, `--max-clients`,

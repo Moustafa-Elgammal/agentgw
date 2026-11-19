@@ -49,7 +49,7 @@ Run the tests: `docker compose run --rm dev make test`. To connect Claude Deskto
 
 Version `0.x`. The pipeline, MCP endpoint, OAuth 2.1, Redis and Postgres stores, confirmations,
 manifest upload and rollback, activity feed, relay, metrics, and a Helm chart are built and
-tested. Open items: OIDC login at consent, a hosted offering, and the docs site and guides
+tested, including optional OIDC sign-in at consent. Open items: a hosted offering, and the docs site and guides
 (see [docs/ROADMAP.md](docs/ROADMAP.md)).
 
 While the version is `0.x`, the manifest format, the signed request and some protocol details
