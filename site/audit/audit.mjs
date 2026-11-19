@@ -27,6 +27,7 @@ const PAGES = [
   ['concept', '/concepts/tiers-and-policy/'],
   ['tutorial', '/guides/04-link-a-player/'],
   ['reference', '/reference/manifest/'],
+  ['soak history', '/project/soak-history/'], // charts and a wide table
 ];
 const SCHEMES = ['light', 'dark'];
 const WIDTHS = [

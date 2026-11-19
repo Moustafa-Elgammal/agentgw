@@ -16,6 +16,9 @@ site/public/og.png
 site/src/content/docs/*
 !site/src/content/docs/index.mdx
 !site/src/content/docs/404.md
+!site/src/content/docs/project/
+site/src/content/docs/project/*
+!site/src/content/docs/project/soak-history.mdx
 /.tutorial-keys/
 .tutorial-tmp/
 /soak-results/

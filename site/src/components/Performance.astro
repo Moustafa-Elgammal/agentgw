@@ -1,8 +1,14 @@
 ---
-// Charts for the soak run in site/src/data/soak.json (written by scripts/bench-report.py).
+// Charts for a soak run: site/src/data/soak.json by default (written by scripts/bench-report.py).
 // Inline SVG, drawn at build time, so there is no chart library and the page works without
 // JavaScript. Each point has a native tooltip, and every chart has a table behind it.
-import d from '../data/soak.json';
+import latest from '../data/soak.json';
+
+// Pass `run` to draw another run (the soak history page does); with no prop it draws the latest.
+const d = (Astro.props.run ?? latest) as typeof latest & { audit_queue?: boolean };
+
+// The site lives under one base path (/agentgw/), so the first path segment is the base on any page.
+const base = `/${Astro.url.pathname.split('/')[1]}/`;
 
 const nice = (max: number) => {
   const p = 10 ** Math.floor(Math.log10(max || 1));
@@ -98,18 +104,18 @@ const latMax = d ? nice(Math.max(...lat.map((l) => l.v)) * 1.1) : 1;
           <tr><td>Gateway memory, first and last sample</td><td>{fmt(charts[0].first)} and {fmt(charts[0].last)} MiB (peak {fmt(Math.max(...charts[0].ys))})</td></tr>
           <tr><td>Gateway CPU</td><td>{fmt(Math.min(...charts[1].ys))} to {fmt(Math.max(...charts[1].ys))} percent of one core</td></tr>
           <tr><td>Redis policy keys</td><td>{fmt(charts[2].first)} at the start, {fmt(charts[2].last)} at the end (two per simulated player)</td></tr>
-          <tr><td>Postgres sessions</td><td>{fmt(pg.first)} at the start, {fmt(pg.last)} at the end. That is the gateway's pool filling to its cap of 8, plus Postgres's own background processes. It stayed at {fmt(pg.last)} for the second half of the run.</td></tr>
+          <tr><td>Postgres sessions</td><td>{fmt(pg.first)} at the start, {fmt(pg.last)} at the end. This is the gateway's pool filling towards its cap of 8{d.audit_queue ? '' : ", plus Postgres's own background processes"}. It was level for the second half of the run.</td></tr>
           <tr><td>Readiness failures</td><td>{d.ready_failures} in {d.samples} samples</td></tr>
         </tbody>
       </table>
     </details>
 
     <p class="gw-perf-note">
-      Measured on {d.env}, on {d.generated}. It is a single machine with a fake backend that answers
+      Measured on {d.env}, on {d.generated}{d.audit_queue ? ', with the batching audit writer on (--audit-queue)' : ''}. It is a single machine with a fake backend that answers
       instantly, so the figures show what the gateway adds (policy, validation, signing, audit and the
       Redis and Postgres round trips), not what your game's own backend will cost. {fmt(d.denied)} calls were
       denied on purpose by the demo's limits and the fake backend, and are not failures. Repeat it yourself with
-      <code>scripts/soak.sh</code>, described in the <a href={`${Astro.url.pathname}operate/runbook/`}>runbook</a>.
+      <code>scripts/soak.sh</code>, described in the <a href={`${base}operate/runbook/`}>runbook</a>.
     </p>
   </div>
 ) : (

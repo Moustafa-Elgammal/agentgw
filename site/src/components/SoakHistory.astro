@@ -1,0 +1,43 @@
+---
+// Every soak run in site/src/data/soak-history/, newest first: a comparison table, then the
+// charts for each run. Add a run with
+//   python3 scripts/bench-report.py soak-results/<run> --out site/src/data/soak-history/<date>-<name>.json
+import Performance from './Performance.astro';
+import oneHour from '../data/soak-history/2026-11-19-1h.json';
+import quarterHour from '../data/soak-history/2026-11-19-15m-audit-queue.json';
+
+type Run = typeof oneHour & { audit_queue?: boolean };
+const runs: Run[] = [quarterHour as Run, oneHour as Run];
+const fmt = (n: number) => (n >= 1000 ? n.toLocaleString('en-US') : String(Math.round(n * 10) / 10));
+const label = (r: Run) => `${Math.round(r.duration_min)} minutes, ${r.audit_queue ? 'batching audit writer' : 'audit written per call'}`;
+const peak = (xs: number[]) => Math.max(...xs);
+---
+<div class="gw-perf">
+  <table>
+    <thead>
+      <tr><th>Run</th><th>Calls</th><th>Rate</th><th>p50</th><th>p95</th><th>p99</th><th>Failed</th><th>Gateway memory</th><th>Ready</th></tr>
+    </thead>
+    <tbody>
+      {runs.map((r) => (
+        <tr>
+          <td><a href={`#run-${r.run}`}>{label(r)}</a><br /><small>{r.generated}</small></td>
+          <td>{fmt(r.calls)}</td>
+          <td>{fmt(r.calls_per_sec)}/s</td>
+          <td>{r.latency_ms.p50} ms</td>
+          <td>{r.latency_ms.p95} ms</td>
+          <td>{r.latency_ms.p99} ms</td>
+          <td>{r.errors}</td>
+          <td>{fmt(r.series.gateway_mib[0])} to {fmt(r.series.gateway_mib[r.series.gateway_mib.length - 1])} MiB (peak {fmt(peak(r.series.gateway_mib))})</td>
+          <td>{r.samples - r.ready_failures} of {r.samples}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+{runs.map((r) => (
+  <section class="gw-run" id={`run-${r.run}`}>
+    <h2>{label(r)}</h2>
+    <Performance run={r} />
+  </section>
+))}

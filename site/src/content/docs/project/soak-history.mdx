@@ -1,0 +1,24 @@
+---
+title: Soak test history
+description: Every soak run of the gateway, with latency, memory and connection charts for each.
+sidebar:
+  order: 1.5
+---
+
+import SoakHistory from '../../../components/SoakHistory.astro';
+
+A soak test holds a steady load for a long time against a real stack (Redis, Postgres, the
+gateway and a fake backend) and samples resource use as it goes. Flat lines mean the gateway does
+not leak memory, connections or policy state. The numbers show what the gateway adds, not what
+your game's own backend costs.
+
+Both runs below used one laptop and the same load: 100 calls per second from 2,000 simulated
+players. They differ in how audit events reach Postgres. Repeat a run with `scripts/soak.sh`, or
+`AUDIT_QUEUE=1 scripts/soak.sh` for the batching writer. The [runbook](/agentgw/operate/runbook/)
+describes both and how to read the results.
+
+<SoakHistory />
+
+The batching writer is not faster at this rate. It matters at higher rates and with a slower
+database, where a call no longer waits for an INSERT. A crash can lose the events that are still
+queued.
