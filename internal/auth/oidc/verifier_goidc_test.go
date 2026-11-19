@@ -335,7 +335,7 @@ func TestDiscoveryFailures(t *testing.T) {
 	notJSON := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>")) }))
 	t.Cleanup(notJSON.Close)
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, good.srv.URL+r.URL.Path, http.StatusFound)
+		http.Redirect(w, r, good.srv.URL+r.URL.Path, http.StatusFound) //nolint:gosec // the test server redirects on purpose: the verifier must not follow it
 	}))
 	t.Cleanup(redirect.Close)
 	down := httptest.NewServer(http.NotFoundHandler())

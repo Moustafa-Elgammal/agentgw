@@ -64,7 +64,7 @@ func newE2EIdP(t *testing.T) *e2eIdP {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.tokenHits++
-		if id != "gw-client" || secret != "idp-client-secret" ||
+		if id != "gw-client" || secret != "idp-client-secret" || //nolint:gosec // a fixed test value
 			base64.RawURLEncoding.EncodeToString(sum[:]) != p.challenge {
 			http.Error(w, `{"error":"invalid_grant"}`, http.StatusBadRequest)
 			return
