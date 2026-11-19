@@ -105,3 +105,39 @@ func TestFailsClosedWhenPostgresIsDown(t *testing.T) {
 	s2 := New(pool) // no OnError: must not panic
 	s2.Record(ctx, audit.Event{})
 }
+
+func TestBatcherContract(t *testing.T) {
+	auditest.Run(t, func(t *testing.T) audit.Store {
+		b, err := audit.NewBatcher(testStore(t), audit.BatcherConfig{Queue: 1024, BatchSize: 5, FlushInterval: time.Hour})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = b.Close(context.Background()) })
+		return b
+	})
+}
+
+func TestWriteBatchRoundTrip(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	at := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	var in []audit.Event
+	for i := 0; i < 250; i++ {
+		in = append(in, audit.Event{Time: at.Add(time.Duration(i) * time.Second), Tenant: "t1", Player: "p", Tool: "build",
+			Tier: "medium", Outcome: "denied", Code: "daily_amount_cap", ArgsSHA: "abc"})
+	}
+	if err := s.WriteBatch(ctx, in); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.WriteBatch(ctx, nil); err != nil {
+		t.Errorf("an empty batch must be a no-op: %v", err)
+	}
+	got, err := s.Query(ctx, audit.Query{Tenant: "t1", Limit: 200})
+	if err != nil || len(got) != 200 {
+		t.Fatalf("got %d events, %v", len(got), err)
+	}
+	last := got[0]
+	if last.Code != "daily_amount_cap" || last.ArgsSHA != "abc" || !last.Time.Equal(at.Add(249*time.Second)) {
+		t.Errorf("round trip lost data: %+v", last)
+	}
+}

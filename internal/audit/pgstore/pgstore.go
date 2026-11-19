@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Moustafa-Elgammal/agentgw/internal/audit"
@@ -65,6 +66,25 @@ func (s *Store) Record(ctx context.Context, e audit.Event) {
 	if err != nil && s.OnError != nil {
 		s.OnError(fmt.Errorf("audit pgstore: record: %w", err))
 	}
+}
+
+// WriteBatch implements audit.BatchWriter. It writes every event with one COPY, which is one
+// transaction and one WAL flush for the whole batch. Either all of the events are written or none
+// are; the caller decides what a failure means.
+func (s *Store) WriteBatch(ctx context.Context, events []audit.Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+	rows := make([][]any, len(events))
+	for i, e := range events {
+		rows[i] = []any{e.Tenant, e.Player, e.Tool, e.Tier, e.Outcome, e.Code, e.ArgsSHA, e.Time.UTC()}
+	}
+	_, err := s.db.CopyFrom(ctx, pgx.Identifier{"audit_events"},
+		[]string{"tenant", "player", "tool", "tier", "outcome", "code", "args_sha", "time"}, pgx.CopyFromRows(rows))
+	if err != nil {
+		return fmt.Errorf("audit pgstore: write batch: %w", err)
+	}
+	return nil
 }
 
 // Query implements audit.Store.
