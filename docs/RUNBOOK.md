@@ -202,7 +202,7 @@ backend. If the studio already runs an OIDC identity provider (IdP), the consent
 second way: **Sign in with your game account**. It is off until `--oidc-issuer` is set. The design
 and its checks are in [design/oidc-consent.md](design/oidc-consent.md).
 
-1. At the IdP, register a confidential client. The redirect URI is the gateway's public URL plus
+1. At the IdP, register a confidential client (or a public client, see below). The redirect URI is the gateway's public URL plus
    `/authorize/oidc/callback`, for example `https://gw.example.com/authorize/oidc/callback`, and it
    must match `--public-url` exactly.
 2. Pick the claim that carries the player id your game uses. It must never change for a person
@@ -219,6 +219,13 @@ and its checks are in [design/oidc-consent.md](design/oidc-consent.md).
 
    Helm: set `oidc.issuer`, `oidc.clientId`, `oidc.playerClaim`, and put `oidc-client-secret` and
    `oidc-session-secret` in the `existingSecret`.
+
+   **Public client.** If your IdP's client is registered without a secret (PKCE only), add
+   `--oidc-public-client` (Helm: `oidc.publicClient: true`) and do not set
+   `AGENTGW_OIDC_CLIENT_SECRET`. The gateway refuses to start if both are present, so a leftover
+   secret is not ignored silently. The gateway always uses PKCE with S256 either way; a secret adds
+   client authentication on the token request. Prefer a confidential client when the IdP offers one,
+   because the gateway is a server that can keep a secret.
 4. Check the log for `oidc sign-in enabled` (it names the issuer, claim and callback, never a
    secret), then open the consent page. The sign-in button is there.
 
