@@ -30,6 +30,12 @@ The gateway server.
 | `--max-body` | int | 1048576 | largest request body in bytes. OAuth and studio endpoints keep their lower caps, manifest upload its own |
 | `--max-clients` | int | 10000 | most OAuth clients this process will register (negative disables) |
 | `--max-scope` | string | from `AGENTGW_MAX_SCOPE` | the most any player may grant: coach (read only, recommended for a first pilot) or operator. Empty means operator |
+| `--oidc-algs` | string | `RS256,ES256` | ID token signature algorithms accepted. Asymmetric only: none and the HS family are refused |
+| `--oidc-allow-insecure-http` | bool | false | DEV ONLY: allow an http issuer on a loopback address, for a local identity provider |
+| `--oidc-client-id` | string | none | OIDC client id registered at the identity provider, with the redirect URI &lt;public-url&gt;/authorize/oidc/callback |
+| `--oidc-issuer` | string | none | turn on sign in with your identity provider at the consent page: its OIDC issuer URL. Needs --oidc-client-id and the secrets AGENTGW_OIDC_CLIENT_SECRET and AGENTGW_OIDC_SESSION_SECRET (not with --dev-auth) |
+| `--oidc-player-claim` | string | `sub` | ID token claim that carries the player id your game uses. It must be stable for a person for ever: not an email address or a display name |
+| `--oidc-scopes` | string | `openid` | scopes requested from the identity provider, space or comma separated (openid is always included) |
 | `--ops-addr` | string | `127.0.0.1:9090` | listen address for /healthz, /readyz and /metrics. Keep it off public networks (empty disables) |
 | `--postgres-max-conns` | int | 0 | most Postgres connections the pool opens (0 keeps the driver default, the larger of 4 and the CPU count; a pool_max_conns in the URL is used when this is 0) |
 | `--postgres-min-conns` | int | 0 | Postgres connections kept open when idle (0 keeps the driver default of none; a pool_min_conns in the URL is used when this is 0) |

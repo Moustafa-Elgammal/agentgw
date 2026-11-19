@@ -9,6 +9,9 @@ this project's Apache-2.0 license. The generator fails the run otherwise.
 |---|---|---|
 | github.com/cespare/xxhash/v2 | v2.3.0 | MIT |
 | github.com/coder/websocket | v1.8.15 | ISC |
+| github.com/coreos/go-oidc/v3/oidc | v3.21.0 | Apache-2.0 |
+| github.com/go-jose/go-jose/v4 | v4.1.9 | Apache-2.0 |
+| github.com/go-jose/go-jose/v4/json | v4.1.9 | BSD-3-Clause |
 | github.com/goccy/go-yaml | v1.19.2 | MIT |
 | github.com/google/jsonschema-go/jsonschema | v0.4.3 | MIT |
 | github.com/jackc/pgpassfile | v1.0.0 | MIT |
@@ -21,7 +24,7 @@ this project's Apache-2.0 license. The generator fails the run otherwise.
 | github.com/segmentio/encoding | v0.5.4 | MIT |
 | github.com/yosida95/uritemplate/v3 | v3.0.2 | BSD-3-Clause |
 | go.uber.org/atomic | v1.12.0 | MIT |
-| golang.org/x/oauth2 | v0.35.0 | BSD-3-Clause |
+| golang.org/x/oauth2 | v0.36.0 | BSD-3-Clause |
 | golang.org/x/sync | v0.22.0 | BSD-3-Clause |
 | golang.org/x/sys/cpu | v0.48.0 | BSD-3-Clause |
 | golang.org/x/text | v0.41.0 | BSD-3-Clause |
