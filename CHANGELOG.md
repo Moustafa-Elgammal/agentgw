@@ -7,8 +7,25 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-19
+
+First public release.
+
 ### Added
 
+- Call pipeline: lookup, rate limit, validation, confirmation, reserve, signed backend call,
+  settle, audit. Policy outages fail closed.
+- Manifest (JSON or YAML) with strict validation, and the `gwctl` CLI.
+- MCP endpoint (stateless streamable HTTP) and the `gwbridge` stdio bridge for desktop clients.
+- OAuth 2.1 resource server with an embedded authorization server (PKCE, dynamic client
+  registration, link tickets, consent, grants, rotating refresh tokens).
+- Redis policy store with kill switches. Postgres stores for confirmations, auth, manifests
+  and the audit feed.
+- Studio APIs: grants, confirmations, manifest upload and rollback, activity feed, key rotation.
+- Relay for client-authoritative games over WebSocket, with routing across replicas.
+- Metrics, health and readiness on a separate ops listener. SSRF-safe connector.
+- Helm chart, Grafana dashboard, Prometheus alerts, runbook, load tool.
+- `pkg/agentsig`, the public request signing library.
 - Optional batched audit writes: `--audit-queue`, `--audit-batch-size`, `--audit-flush-interval` and `--audit-overflow`. Events go on a bounded queue and one writer sends them with a single `COPY`, so a call no longer waits for Postgres and commits fall sharply. Off by default (queue 0 keeps the synchronous write). Queued events are lost on a crash and written on a graceful stop. New metrics: `audit_queue_depth`, `audit_dropped_total{reason}`, `audit_batch_size`, `audit_flush_duration_seconds`, `audit_flush_errors_total`. See `docs/design/audit-write-path.md`.
 - OIDC sign-in at the consent page, off unless `--oidc-issuer` is set: `internal/auth/oidc` (flow, claim checks, sealed session cookie, go-oidc signature verifier), `POST /authorize/oidc` and `GET /authorize/oidc/callback`. Flags `--oidc-issuer`, `--oidc-client-id`, `--oidc-player-claim`, `--oidc-scopes`, `--oidc-algs` and `--oidc-allow-insecure-http` (dev only); secrets `AGENTGW_OIDC_CLIENT_SECRET` and `AGENTGW_OIDC_SESSION_SECRET`; Helm `oidc` values. The gateway checks the provider at start and refuses to run if it cannot offer the sign-in. A failed sign-in is logged with its reason (`oidc sign-in failed`); the agent only sees `access_denied`. New dependencies: `go-oidc/v3` and `go-jose/v4` (Apache-2.0). See `docs/design/oidc-consent.md`.
 - Relay protocol v1.1 (backward compatible): the hello announces limits, calls carry
@@ -32,35 +49,15 @@ Each such change has an entry in [docs/DECISIONS.md](docs/DECISIONS.md).
 - `--max-body`: request bodies are capped at the front door (1 MiB, 64 KiB for OAuth and studio
   endpoints) with a clean `413 {"error":"too_large"}`. Keep-alive connections close after 120 s idle.
 
-### Fixed
-
-- A relay client that never answered could hold slots for calls from other replicas forever; they
-  now expire with the caller's deadline.
-
 ### Changed
 
 - Examples, tutorials and docs now write manifests in YAML. JSON is still supported and stored.
   The Helm chart takes `manifestFile` (default `manifest.yaml`) so the seed manifest can be either.
 
-## [0.1.0] - unreleased
+### Fixed
 
-First public release.
-
-### Added
-
-- Call pipeline: lookup, rate limit, validation, confirmation, reserve, signed backend call,
-  settle, audit. Policy outages fail closed.
-- Manifest (JSON or YAML) with strict validation, and the `gwctl` CLI.
-- MCP endpoint (stateless streamable HTTP) and the `gwbridge` stdio bridge for desktop clients.
-- OAuth 2.1 resource server with an embedded authorization server (PKCE, dynamic client
-  registration, link tickets, consent, grants, rotating refresh tokens).
-- Redis policy store with kill switches. Postgres stores for confirmations, auth, manifests
-  and the audit feed.
-- Studio APIs: grants, confirmations, manifest upload and rollback, activity feed, key rotation.
-- Relay for client-authoritative games over WebSocket, with routing across replicas.
-- Metrics, health and readiness on a separate ops listener. SSRF-safe connector.
-- Helm chart, Grafana dashboard, Prometheus alerts, runbook, load tool.
-- `pkg/agentsig`, the public request signing library.
+- A relay client that never answered could hold slots for calls from other replicas forever; they
+  now expire with the caller's deadline.
 
 [Unreleased]: https://github.com/Moustafa-Elgammal/agentgw/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/Moustafa-Elgammal/agentgw/releases/tag/v0.1.0
