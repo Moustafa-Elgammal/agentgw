@@ -26,7 +26,7 @@
 - [ ] Value-based caps: add a backend dry-run call so the gateway can cap coins, or keep caps on calls and numeric arguments?
 - [ ] Audit: hashes only, or redacted arguments as an opt-in?
 - [x] Relay routing across replicas: Redis pub/sub and presence keys (decided for M5; revisit NATS if pilot scale needs it).
-- [ ] Player identity at consent: link tickets only, or also OIDC against the studio's identity provider?
+- [x] Player identity at consent: link tickets, and also OIDC against the studio's identity provider (decided and built, see "OIDC at consent (M3)").
 - [ ] Which Go SDK release to pin, and how to track MCP spec revisions after 2026-07-28?
 - [ ] Open core: what, if anything, stays out of the open-source repository?
 
@@ -53,7 +53,7 @@ OIDC against the studio's identity provider.
 - **Link tickets.** The studio's backend mints a single-use ticket (5 minutes) for a logged-in
   player through a request signed like any other studio call (`agentsig`), and sends the player to
   the consent page with it. The ticket carries the player id.
-- **OIDC.** Added after the ticket flow. Proposed design and the dependency question: see "OIDC at consent (proposed)" below.
+- **OIDC.** Added after the ticket flow. Built with `go-oidc/v3` and `go-jose/v4` (approved by the maintainer): see "OIDC at consent (M3)" below, and [tutorial 8](tutorials/08-sign-in-with-your-identity-provider.md).
 - **Dev auth.** `X-Dev-Player` and `X-Dev-Admin` stay behind an explicit `--dev-auth` flag. Without
   it, requests need a valid bearer token.
 - **Tenants.** One tenant per gateway process in M3 (`--tenant`). Per-tenant tokens and keys come with M4.

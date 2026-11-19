@@ -264,6 +264,50 @@ These come back as `{"error":"<code>"}` with an HTTP status to your backend, not
 - **Likely cause:** a store failed, or the replay cache is full.
 - **Fix:** retry with a new idempotency key. Nothing was changed.
 
+## Signing in with your identity provider
+
+These are about the OIDC button on the consent page ([tutorial 8](../tutorials/08-sign-in-with-your-identity-provider.md),
+[runbook](../RUNBOOK.md#sign-in-with-your-identity-provider-oidc)). The player only ever sees one
+generic message. The reason is in the gateway log as `oidc sign-in failed`, with a `kind` and the
+error.
+
+### The gateway will not start with OIDC on
+
+**Cause:** the gateway checks everything at start. The message names the problem: a missing
+`AGENTGW_OIDC_CLIENT_SECRET`, a session secret under 32 bytes, an unsafe `--oidc-algs` (`none` and
+the HS family are refused), `--oidc-issuer` with `--dev-auth`, an issuer that is not `https` (use
+`--oidc-allow-insecure-http` only for a loopback test provider), or discovery failing.
+**Check:** `curl <issuer>/.well-known/openid-configuration`. Its `issuer` field must equal
+`--oidc-issuer` exactly, including a trailing slash or not. **Fix:** correct the flag or the secret.
+
+### There is no sign-in button on the consent page
+
+**Cause:** the gateway could not reach the identity provider when it drew the page, so it hides the
+button and the link code form still works. **Check:** can the gateway reach the issuer URL? **Fix:**
+restore the route, DNS or certificate.
+
+### `kind="token rejected"` in the log
+
+**Cause:** the ID token failed a check. The error says which: signature (wrong keys or an algorithm
+outside `--oidc-algs`), issuer, audience (the client id differs), `nonce` does not match, expired
+or issued too long ago, or the player claim is missing or not a usable id (empty, over 128
+characters, spaces). **Check:** decode the ID token's payload and compare `iss`, `aud` and your
+`--oidc-player-claim`. **Fix:** configure the client at the provider to match, or point
+`--oidc-player-claim` at a claim the provider really sends. If tokens look expired on a correct
+setup, check clock sync on the gateway hosts.
+
+### `kind="identity provider unavailable"` in the log
+
+**Cause:** the code exchange or discovery failed, for example a wrong client secret or the provider
+being down. The agent sees `temporarily_unavailable`. **Fix:** check the client secret and the
+provider's status.
+
+### The player lands on "Cannot continue"
+
+**Cause:** the sign-in session was missing, expired (a few minutes), already used, or from another
+browser. Pressing back and reloading the callback also counts as a second use. **Fix:** start again
+from the agent. With several replicas, every replica must have the same `AGENTGW_OIDC_SESSION_SECRET`.
+
 ## Still stuck
 
 The [runbook](../RUNBOOK.md) has a symptom table for operators, and the [FAQ](faq.md) answers common questions. Report bugs on the project's GitHub issues page.

@@ -1,0 +1,47 @@
+# Tutorial 8: the gateway signs players in with an identity provider (Dex) at the consent page.
+#
+#   docker compose -f docker-compose.yml -f examples/tutorials/compose.oidc.yml up -d --build dex gateway
+#
+# Dev only. Two things are unusual, both so that the player's browser and the gateway see the
+# identity provider at the SAME address (OIDC requires the issuer to match exactly):
+#
+#   * Dex listens on 127.0.0.1:15556 and the gateway shares Dex's network namespace, so the
+#     address 127.0.0.1:15556 reaches Dex from your machine and from inside the gateway.
+#   * The ports of the gateway are therefore published by the dex service.
+#
+# A real deployment does not need this: the issuer is simply your identity provider's https URL.
+# The gateway exits at start if it cannot reach the issuer, so it is allowed to restart until Dex is up.
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    volumes:
+      - ./examples/tutorials/dex:/etc/dex:ro
+    ports:
+      - "127.0.0.1:${TUTORIAL_PORT:-8080}:8080"      # the gateway
+      - "127.0.0.1:${TUTORIAL_OPS_PORT:-9091}:9091"  # the gateway's ops port
+      - "127.0.0.1:15556:15556"                      # Dex
+
+  gateway:
+    network_mode: "service:dex"
+    ports: !reset []
+    restart: on-failure
+    depends_on:
+      dex: { condition: service_started }
+    command:
+      - --manifest=/etc/agentgw/manifest.yaml
+      - --backend-url=http://city-backend:9090
+      - --backend-allow-private
+      - --addr=0.0.0.0:8080
+      - --redis-addr=redis:6379
+      - --ops-addr=0.0.0.0:9091
+      - --public-url=http://127.0.0.1:${TUTORIAL_PORT:-8080}
+      - --tenant=city
+      - --oidc-issuer=http://127.0.0.1:15556/dex
+      - --oidc-allow-insecure-http
+      - --oidc-client-id=agentgw
+      - --oidc-player-claim=name
+      - --oidc-scopes=openid profile
+    environment:
+      - AGENTGW_OIDC_CLIENT_SECRET=dev-oidc-client-secret
+      - AGENTGW_OIDC_SESSION_SECRET=dev-only-session-secret-0123456789abcdef-0123456789

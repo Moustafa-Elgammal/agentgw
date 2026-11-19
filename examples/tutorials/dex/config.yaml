@@ -1,0 +1,32 @@
+# Dex, a small OpenID Connect identity provider, standing in for your studio's own login system in
+# tutorial 8. One static client (the gateway) and one static player. Dev only: the passwords and
+# secrets here are public placeholders.
+issuer: http://127.0.0.1:15556/dex
+
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:15556
+
+oauth2:
+  # No "grant access" screen: the player already chose what the agent may do on the gateway's page.
+  skipApprovalScreen: true
+
+enablePasswordDB: true
+
+staticClients:
+  - id: agentgw
+    name: agentgw
+    secret: dev-oidc-client-secret
+    # The gateway's callback, on the demo port and on the port the verification script uses.
+    redirectURIs:
+      - http://127.0.0.1:8080/authorize/oidc/callback
+      - http://127.0.0.1:18108/authorize/oidc/callback
+
+staticPasswords:
+  - email: player@example.com
+    # bcrypt of the word "password" (the example hash from Dex's own documentation)
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    username: player
+    userID: 08a8684b-db88-4b73-90a9-3cd1661f5466
