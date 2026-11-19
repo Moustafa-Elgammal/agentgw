@@ -28,13 +28,13 @@ gh repo edit Moustafa-Elgammal/agentgw --visibility public --accept-visibility-c
 
 ## Branch protection on `main`
 
-Require a pull request, the `test`, `lint`, `vuln` and `dco` checks, linear history, no force
+Require a pull request, the `test`, `lint`, `govulncheck` and `signoff` checks (job names), linear history, no force
 push, no deletion, and do not allow admin bypass. Use a ruleset (Settings, Rules) or:
 
 ```bash
 gh api -X PUT repos/Moustafa-Elgammal/agentgw/branches/main/protection --input - <<'JSON'
 {
-  "required_status_checks": {"strict": true, "contexts": ["test", "lint", "vuln", "dco"]},
+  "required_status_checks": {"strict": true, "contexts": ["test", "lint", "govulncheck", "signoff"]},
   "enforce_admins": true,
   "required_pull_request_reviews": {"required_approving_review_count": 0},
   "restrictions": null,
