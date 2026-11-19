@@ -11,3 +11,4 @@ services:
       - --ops-addr=0.0.0.0:9091
       - --dev-auth
       - --audit-queue=10000
+      - --audit-retention=${AUDIT_RETENTION:-720h}

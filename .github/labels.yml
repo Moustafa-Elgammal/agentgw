@@ -11,6 +11,3 @@
 - { name: area/manifest, color: c5def5, description: Manifest format and store }
 - { name: area/ops, color: c5def5, description: Metrics, Helm, runbook }
 - { name: milestone/M6, color: fbca04, description: Hardening }
-- { name: milestone/M7, color: fbca04, description: Open source release }
-- { name: milestone/M8, color: fbca04, description: Project site }
-- { name: milestone/M9, color: fbca04, description: Developer guides }

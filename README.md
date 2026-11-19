@@ -97,7 +97,7 @@ The full component list is in [docs/FEATURES.md](docs/FEATURES.md).
 - [Signed request protocol](docs/PROTOCOL.md)
 - [Security model](docs/SECURITY-MODEL.md)
 - [Runbook](docs/RUNBOOK.md) and [releasing](docs/RELEASING.md)
-- [Roadmap](docs/ROADMAP.md), [decisions](docs/DECISIONS.md), [open source plan](docs/OPEN-SOURCE-PLAN.md)
+- [Roadmap](docs/ROADMAP.md), [decisions](docs/DECISIONS.md)
 
 ## Contributing and security
 
