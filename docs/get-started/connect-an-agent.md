@@ -34,6 +34,20 @@ URL:     http://127.0.0.1:8080/mcp
 Header:  X-Dev-Player: p1
 ```
 
+### Try it with plain curl
+
+With `--dev-auth` you can talk to `/mcp` without an MCP client. The player and an `Accept` header that
+allows both reply types are required. `MCP-Protocol-Version` is optional here, and real clients send it.
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/mcp \
+  -H 'X-Dev-Player: p1' -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' -H 'MCP-Protocol-Version: 2025-06-18' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+The answer lists the tools from the manifest, each with its input schema.
+
 ## Claude Desktop
 
 Claude Desktop starts local stdio servers and cannot reach an `http://localhost` URL itself.

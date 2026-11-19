@@ -84,7 +84,7 @@ The full component list is in [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Docs
 
-- [Overview](docs/get-started/overview.md), [quickstart](docs/get-started/quickstart.md) and [connect an agent](docs/get-started/connect-an-agent.md)
+- New here? [Overview](docs/get-started/overview.md), [quickstart](docs/get-started/quickstart.md), [connect an agent](docs/get-started/connect-an-agent.md) and the [glossary](docs/get-started/glossary.md)
 - Guides: [learning path](docs/guides/index.md), [best practices](docs/guides/best-practices.md), [cookbook](docs/guides/cookbook.md), [troubleshooting](docs/guides/troubleshooting.md), [FAQ](docs/guides/faq.md)
 - Concepts: [how a call flows](docs/concepts/pipeline.md), [tiers and policy](docs/concepts/tiers-and-policy.md), [players, grants and confirmations](docs/concepts/players-grants-confirmations.md)
 - [Architecture](docs/ARCHITECTURE.md) and [features](docs/FEATURES.md)

@@ -45,6 +45,8 @@ unless the studio turns them on. The reasoning behind tiers is in
 
 ## 2. Write the manifest
 
+Save this block as `pets.yaml` in the repository folder. The next steps use that file.
+
 ```yaml manifest
 version: 1
 game: pawprint-pets
@@ -279,6 +281,7 @@ included, works the same. See the Relay section of the [protocol](../PROTOCOL.md
   params:
     pet: {type: string}
 ```
+
 ## JSON works too
 
 The gateway reads a manifest as JSON or YAML and picks the format from the file name: `.yaml` or

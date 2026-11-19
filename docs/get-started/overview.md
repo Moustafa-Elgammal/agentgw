@@ -67,6 +67,8 @@ relay is in the same document under "Relay".
 
 ## Where to go next
 
+New words? The [glossary](glossary.md) explains each one in a sentence.
+
 1. [Run the demo in five minutes](quickstart.md).
 2. [Connect an agent](connect-an-agent.md).
 3. [How a call flows](../concepts/pipeline.md).

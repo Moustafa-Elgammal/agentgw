@@ -142,7 +142,7 @@ docker compose run --rm sig-python
 docker compose run --rm sig-typescript
 ```
 
-### C#
+### C# (.NET)
 
 `examples/signing/csharp/SigVerify.cs`. .NET standard library only. The test is a small console
 program, so it needs no NuGet packages and runs offline. It was run with the .NET 8 SDK image.
@@ -220,6 +220,9 @@ curl -si -X POST "${args[@]}" -d "$body" http://127.0.0.1:9190/api/v1/pets/feed
 Both answers carry the same body. The second adds `X-Idempotent-Replay: true`, and the coins
 dropped once, not twice. Change one character of `$body` after signing and you get `401`: the
 signature covers the body.
+
+The idempotency key `replay-1` is fixed, so on a second run of this block the first call is already
+a replay. Change `replay-1` to a new key to see the first call run for real.
 
 Clean up with `docker compose -f examples/pet-backend-go/compose.yml down`. The Python
 backend works the same way with `examples/pet-backend-python/compose.yml`.

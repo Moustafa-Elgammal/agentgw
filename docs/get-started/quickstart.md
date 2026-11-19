@@ -3,6 +3,13 @@
 Run the whole demo in about five minutes. You need Docker with Compose v2 and nothing else.
 Nothing is installed on your machine, and every port binds to `127.0.0.1`.
 
+**Before you start**
+
+- Docker with Compose v2.20 or newer (`docker compose version`).
+- Free ports `8080` (the gateway) and `9091` (its health and metrics), both on `127.0.0.1`.
+- About five minutes, plus the first-run image downloads.
+- New to the words (MCP, tier, caps, scope)? Keep the [glossary](glossary.md) open.
+
 The demo is a fictional city-builder. A fake city backend sits behind the gateway. The gateway
 runs with `--dev-auth`, which takes the player from a header. That is for local trying only.
 
@@ -38,6 +45,9 @@ These four tools come from `examples/city/manifest.yaml`. (The output above is w
 reading.)
 
 ## 3. Call a tool
+
+If you already ran the README example on this stack, the city has less food than shown below.
+Run `docker compose down -v` and start again to reset it.
 
 ```bash
 curl -s -X POST -H 'X-Dev-Player: p1' -d '{}' \
@@ -101,8 +111,16 @@ for i in 1 2; do curl -s -X POST -H 'X-Dev-Player: p1' -d '{}' \
 {"ok":false,"code":"cooldown","message":"collect_taxes is available again in 60 seconds"}
 ```
 
-A rate limit. Reads are limited to 120 a minute per player. After 120 quick calls, the next
-one is refused:
+A rate limit. Reads are limited to 120 a minute per player. Make 125 quick calls as a new player
+and look at the last answer:
+
+```bash
+for i in $(seq 1 125); do
+  curl -s -X POST -H 'X-Dev-Player: p9' -d '{}' http://127.0.0.1:8080/v1/tools/get_city_state/call
+done | tail -n 1
+```
+
+After 120 calls the rest are refused:
 
 ```json
 {"ok":false,"code":"rate_limited","message":"max 120 reads per minute. Wait and retry."}
