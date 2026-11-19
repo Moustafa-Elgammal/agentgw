@@ -21,3 +21,4 @@ site/src/content/docs/*
 /soak-results/
 .DS_Store
 /.unity-out/
+/.claude/worktrees/
