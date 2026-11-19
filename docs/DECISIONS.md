@@ -360,3 +360,29 @@ down that socket.
   limited to 4096 bytes, and integer bounds are compared as int64 (float64 rounded values above
   2^53 onto the bound).
 
+## Site (M8)
+
+- **Astro Starlight**, chosen with the user over MkDocs Material, Docusaurus and Hugo. Markdown
+  stays the source, search, dark mode and a splash landing page come with it.
+- **Everything lives in `site/` and runs in a container.** `docker compose run --rm site
+  build|dev|check|check-external|lock`. Node is never installed on the host. Dependencies are pinned
+  exactly in `site/package.json` with a lockfile, and never touch the Go module.
+- **The site reads `docs/`, it does not fork it.** `site/scripts/sync-docs.mjs` copies `docs/**` and
+  the root `CHANGELOG`, `CONTRIBUTING`, `SECURITY` and `CODE_OF_CONDUCT` into
+  `site/src/content/docs/` (git-ignored) before every build. It takes the title from the first H1,
+  adds an edit link, sets the sidebar order, and rewrites relative links to site routes or GitHub
+  URLs. `OPEN-SOURCE-PLAN`, `REPO-SETTINGS` and `AUDIT-REPORT` are process documents and stay out of
+  the site. The docs read the same on GitHub.
+- **Pages not written yet get a placeholder and a warning**, so a build never fails because a
+  planned page is missing. The expected list is in the sync script.
+- **Only the landing page (`index.mdx`) and `404.md` are written by hand** under `site/`.
+- **Base path `/agentgw/`**, site URL `https://moustafa-elgammal.github.io/agentgw/`, default
+  github.io for now (a custom domain later needs a `CNAME` and a new base).
+- **Gates.** `site check` fails on a build warning, a broken internal link
+  (`starlight-links-validator`), a missing sitemap or `robots.txt`, or a URL that escapes the base.
+  `go test ./test/docs` validates every `json manifest` or `yaml manifest` code block with the real
+  validator. `site check-external` checks outside links, is not a gate, and skips itself offline.
+  `.github/workflows/pages.yml` runs these on pull requests and deploys on pushes to `main`.
+- **Not done:** spell check and Markdown lint, an accessibility audit, versioned docs per release,
+  and the terminal recording on the landing page (a text placeholder marks the spot).
+

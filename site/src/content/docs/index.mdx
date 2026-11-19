@@ -1,0 +1,182 @@
+---
+title: agentgw
+description: An open-source gateway that lets a player's own AI agent act safely inside a game. Tools from a manifest, policy, signed backend calls, player confirmations and an audit log.
+template: splash
+editUrl: false
+hero:
+  title: Let a player's AI agent play your game, safely.
+  tagline: agentgw turns a manifest of game actions into MCP tools, applies your safety policy, calls your backend with a signed request, and records every attempt.
+  actions:
+    - text: Get started
+      link: /agentgw/get-started/overview/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/Moustafa-Elgammal/agentgw
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+import HowItWorks from '../../components/HowItWorks.astro';
+
+<div class="gw-section">
+
+## See it work
+
+<div class="gw-demo">
+  A terminal recording of an agent playing the example city game through the gateway goes here.
+  Until then, the [quickstart](/agentgw/get-started/quickstart/) runs the same demo with five commands.
+</div>
+
+</div>
+
+<div class="gw-section">
+
+## How it works
+
+<p class="gw-lede">
+  The agent never talks to your backend. It calls a tool on the gateway, and the gateway decides
+  whether that call may happen, in a fixed order, before anything reaches the game.
+</p>
+
+<HowItWorks />
+
+</div>
+
+<div class="gw-section">
+
+## What you get
+
+<CardGrid>
+  <Card title="Tools from a manifest" icon="document">
+    Describe actions once, in JSON or YAML. Strict validation reports every problem at once.
+  </Card>
+  <Card title="Policy per tier" icon="setting">
+    Read, safe, medium and sensitive tiers. Sensitive tools stay hidden from agents.
+  </Card>
+  <Card title="Caps and cooldowns" icon="seti:clock">
+    Daily call and amount caps, cooldowns and rate limits. Caps reserve first, so concurrent calls cannot overspend.
+  </Card>
+  <Card title="Signed backend calls" icon="approve-check">
+    HMAC-SHA256 with a timestamp and an idempotency key. Any language can verify it in a few lines.
+  </Card>
+  <Card title="Player confirmations" icon="pencil">
+    Mark a tool `confirm` and the player approves each call in your own UI before it runs.
+  </Card>
+  <Card title="OAuth linking" icon="puzzle">
+    An embedded OAuth 2.1 server links a player's agent with PKCE. Players list and revoke agents.
+  </Card>
+  <Card title="Kill switches" icon="warning">
+    Turn off a tool, a player or everything, and the next call is refused.
+  </Card>
+  <Card title="Audit with hashed arguments" icon="open-book">
+    Every attempt is recorded, allowed or denied. The log keeps hashes, not game data.
+  </Card>
+  <Card title="Live manifest and keys" icon="random">
+    Upload and roll back manifests, and rotate signing keys, without a restart.
+  </Card>
+  <Card title="MCP over streamable HTTP" icon="rocket">
+    Works with any MCP client. A stdio bridge covers desktop clients.
+  </Card>
+</CardGrid>
+
+</div>
+
+<div class="gw-section">
+
+## Safe by design
+
+<p class="gw-lede">Six rules the gateway is built around, in plain words.</p>
+
+<ol class="gw-rules">
+  <li><div><strong>The agent plays by the human's rules.</strong> No side door around game logic.</div></li>
+  <li><div><strong>Every attempt counts.</strong> A call that fails validation still uses up the rate limit.</div></li>
+  <li><div><strong>Limits are reserved before the call.</strong> Two calls at once cannot both spend the last of a cap.</div></li>
+  <li><div><strong>If policy is down, actions stop.</strong> The gateway refuses rather than guesses.</div></li>
+  <li><div><strong>Backend replies are data, not orders.</strong> Nothing a backend returns is treated as an instruction.</div></li>
+  <li><div><strong>The audit log keeps hashes, not game data.</strong> You can prove what happened without storing what it was.</div></li>
+</ol>
+
+</div>
+
+<div class="gw-section">
+
+## Three ways to connect your game
+
+<div class="gw-levels">
+  <div class="gw-level">
+    <span class="tag">Level 0</span>
+    <h3>Manifest only</h3>
+    <p>Map each tool onto a REST endpoint you already have. No backend code.</p>
+  </div>
+  <div class="gw-level">
+    <span class="tag">Level 1</span>
+    <h3>One signed endpoint</h3>
+    <p>Your backend verifies the signature and handles tool calls, in any language.</p>
+  </div>
+  <div class="gw-level">
+    <span class="tag">Built</span>
+    <h3>Relay</h3>
+    <p>For games whose logic runs in the client. The game opens a WebSocket and the gateway sends calls down it.</p>
+  </div>
+</div>
+
+</div>
+
+<div class="gw-section">
+
+## The three pieces you write
+
+<Tabs>
+  <TabItem label="Manifest">
+
+```json manifest
+{"version": 1, "tools": [
+  {"name": "sell_resource", "description": "Sell food, water or materials at the current sell price.",
+   "tier": "medium", "caps": {"per_day_amount": 300, "amount_param": "quantity"},
+   "http": {"method": "POST", "url": "/api/v1/market/sell"},
+   "params": {"resource": {"type": "string", "enum": ["food", "water", "materials"]},
+              "quantity": {"type": "integer", "min": 1, "max": 1000}}}
+]}
+```
+
+  </TabItem>
+  <TabItem label="Signed request">
+
+```http
+POST /api/v1/market/sell
+X-AG-Key-Id: studio-1
+X-AG-Timestamp: 1767268800
+X-AG-Player: player-7
+X-AG-Idempotency-Key: 3f2c9a1e-7b44-4c0e-9d41-0a6f1b2c8d55
+X-AG-Signature: 9b1e...hex HMAC-SHA256 of the request...
+```
+
+  </TabItem>
+  <TabItem label="Agent tool call">
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+ "params": {"name": "sell_resource", "arguments": {"resource": "food", "quantity": 50}}}
+```
+
+  </TabItem>
+</Tabs>
+
+</div>
+
+<div class="gw-section">
+
+## Status
+
+<div class="gw-status">
+
+agentgw is version `0.x`. The pipeline, MCP endpoint, OAuth, stores, confirmations, manifest
+upload and rollback, activity feed and relay are built and tested. While the version is `0.x`, the
+manifest format, the signed request and some protocol details can still change. Every such change is
+recorded in the [decision log](/agentgw/project/decisions/) and the [changelog](/agentgw/project/changelog/).
+Pin a version if you build on it. See the [roadmap](/agentgw/project/roadmap/).
+
+</div>
+
+</div>

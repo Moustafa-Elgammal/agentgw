@@ -133,6 +133,21 @@ services:
     environment:
       - GOFLAGS=-buildvcs=false
 
+  # Project site (Astro Starlight), no host install. Node runs only here:
+  #   docker compose run --rm site build            # site/dist
+  #   docker compose run --rm site check            # build, warnings are errors, link check
+  #   docker compose run --rm site dev              # http://127.0.0.1:4321/agentgw/
+  #   docker compose run --rm site check-external   # external links (skips when offline)
+  #   docker compose run --rm site lock             # regenerate package-lock.json
+  site:
+    build: { context: ./site }
+    profiles: [tools]
+    volumes:
+      - .:/repo
+      - site-node-modules:/repo/site/node_modules
+    ports:
+      - "127.0.0.1:4321:4321"
+
   #   docker compose run --rm actionlint
   actionlint:
     image: rhysd/actionlint:1.7.7
@@ -161,3 +176,4 @@ volumes:
   pg-data:
   go-mod:
   go-build:
+  site-node-modules:

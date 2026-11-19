@@ -7,3 +7,12 @@ coverage.*
 .idea/
 .vscode/
 dist/
+
+# project site (site/): dependencies, build output and the generated copy of docs/
+site/node_modules/
+site/dist/
+site/.astro/
+site/public/og.png
+site/src/content/docs/*
+!site/src/content/docs/index.mdx
+!site/src/content/docs/404.md

@@ -1,0 +1,731 @@
+# The source of docs/reference/studio-api.md (run make docs-gen after editing). A test checks that
+# this file lists every route the handlers register, and nothing else.
+openapi: 3.1.0
+info:
+  title: agentgw studio, admin and relay API
+  version: 0.1.0
+  summary: The HTTP endpoints a game studio's backend and game client call on the gateway.
+  description: |
+    These endpoints are for the studio, not for agents. Agents use the MCP endpoint (`/mcp`)
+    with an OAuth bearer token. Everything under `/v1/studio` is signed with the same
+    HMAC-SHA256 scheme the gateway uses toward the backend (see docs/PROTOCOL.md). The signed
+    `X-AG-Player` header is the player (or, for admin calls, the acting admin). Every response to
+    a signed call carries `Cache-Control: no-store`.
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://127.0.0.1:8080
+    description: A local gateway. Use your own public URL in production.
+tags:
+  - name: Link tickets and grants
+    description: Let a player link an agent, and let the game show and revoke linked agents. Signed with the studio key.
+  - name: Confirmations
+    description: The player approves or denies a pending action in the game's own UI. Signed with the studio key.
+  - name: Manifest
+    description: Upload, read and roll back the tool manifest. Signed with the admin key.
+  - name: Activity
+    description: What a player's agents did, read from the audit log.
+  - name: Relay
+    description: Connect a game client that holds its own game state.
+  - name: OAuth
+    description: The embedded OAuth 2.1 authorization server that agents use to link. Agents and MCP clients call these, not the studio.
+security: []
+paths:
+  /v1/studio/link-tickets:
+    post:
+      tags: [Link tickets and grants]
+      operationId: mintLinkTicket
+      summary: Mint a link ticket for a player
+      description: |
+        The game shows the returned code to a logged in player. The player types it on the
+        consent page to link an agent. A ticket is single use and valid for 5 minutes. The signed
+        `X-AG-Player` is the player the ticket belongs to.
+      security: [{studioSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '201':
+          description: The ticket.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Ticket'}
+              example: {ticket: "K7QF-9M2X", expires_at: "2026-01-02T03:09:05Z"}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '413': {$ref: '#/components/responses/TooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/grants:
+    get:
+      tags: [Link tickets and grants]
+      operationId: listGrants
+      summary: List the player's linked agents
+      description: Lists the player's active grants, oldest first. `client_name` is empty if the client is gone.
+      security: [{studioSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '200':
+          description: The grants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [grants]
+                properties:
+                  grants:
+                    type: array
+                    items: {$ref: '#/components/schemas/Grant'}
+              example:
+                grants:
+                  - id: 9f2c0a
+                    client_id: c1
+                    client_name: Claude on the laptop
+                    scope: operator
+                    resource: https://gw.example/mcp
+                    created_at: "2026-01-02T03:04:05Z"
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [Link tickets and grants]
+      operationId: revokeAllGrants
+      summary: Revoke all of the player's grants
+      description: A "log out all agents" button. Repeating it returns `{"revoked":0}`.
+      security: [{studioSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '200':
+          description: How many grants were revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked]
+                properties:
+                  revoked: {type: integer}
+              example: {revoked: 2}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/grants/{id}:
+    delete:
+      tags: [Link tickets and grants]
+      operationId: revokeGrant
+      summary: Revoke one grant
+      description: |
+        Revokes the grant and every token of it, effective on the next token lookup. A grant that
+        does not exist, is already revoked or belongs to another player gives the same `404`, so
+        ids cannot be probed.
+      security: [{studioSignature: []}]
+      parameters:
+        - {name: id, in: path, required: true, description: "The grant id from the list.", schema: {type: string}}
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '204': {description: "Revoked."}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/confirmations:
+    get:
+      tags: [Confirmations]
+      operationId: listConfirmations
+      summary: List the player's pending confirmations
+      description: Live pending confirmations, oldest first. The list is empty when there are none.
+      security: [{studioSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '200':
+          description: The confirmations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [confirmations]
+                properties:
+                  confirmations:
+                    type: array
+                    items: {$ref: '#/components/schemas/Confirmation'}
+              example:
+                confirmations:
+                  - id: 3f1a77
+                    tool: build_structure
+                    state: pending
+                    created_at: "2026-01-02T03:04:05Z"
+                    expires_at: "2026-01-02T03:14:05Z"
+                    args_sha256: 9b7e00
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/confirmations/{id}/approve:
+    post:
+      tags: [Confirmations]
+      operationId: approveConfirmation
+      summary: Approve a pending confirmation
+      description: |
+        Idempotent: approving an approved confirmation is also `204`. The approval stays bound to
+        one exact tool call and expires with the confirmation (10 minutes). A confirmation that
+        does not exist, has expired or belongs to another player gives `404`.
+      security: [{studioSignature: []}]
+      parameters:
+        - {name: id, in: path, required: true, description: "The confirmation id.", schema: {type: string}}
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '204': {description: "Approved."}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/WrongState'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/confirmations/{id}/deny:
+    post:
+      tags: [Confirmations]
+      operationId: denyConfirmation
+      summary: Deny a pending confirmation
+      description: "Idempotent: denying a denied confirmation is also `204`."
+      security: [{studioSignature: []}]
+      parameters:
+        - {name: id, in: path, required: true, description: "The confirmation id.", schema: {type: string}}
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '204': {description: "Denied."}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/WrongState'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/manifest:
+    put:
+      tags: [Manifest]
+      operationId: uploadManifest
+      summary: Upload and activate a manifest
+      description: |
+        Validates the body, stores it as a new version, activates it and serves it from the next
+        request on. An invalid manifest changes nothing. Other replicas pick the new version up
+        within `--manifest-poll`. `X-AG-Player` names the acting admin and is recorded as the
+        version's `actor`. Not mounted unless an admin key is configured.
+      security: [{adminSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        description: The manifest, at most 1 MiB. JSON, or YAML with `Content-Type` of `application/yaml`.
+        content:
+          application/json:
+            schema: {type: object, description: "The manifest, see the manifest reference."}
+          application/yaml:
+            schema: {type: string}
+      responses:
+        '201':
+          description: The new, active version.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ManifestVersion'}
+              example: {id: 3, sha256: ab12cd, actor: ci, created_at: "2026-01-02T03:04:05Z", tools: 12, active: true}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '413': {$ref: '#/components/responses/TooLarge'}
+        '422': {$ref: '#/components/responses/InvalidManifest'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    get:
+      tags: [Manifest]
+      operationId: getManifest
+      summary: Read the active manifest
+      security: [{adminSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '200':
+          description: The active version and its manifest.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, manifest]
+                properties:
+                  version: {$ref: '#/components/schemas/ManifestVersion'}
+                  manifest: {type: object, description: "The canonical JSON manifest."}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/manifest/versions:
+    get:
+      tags: [Manifest]
+      operationId: listManifestVersions
+      summary: List manifest versions
+      description: All versions, newest first. Exactly one has `active` set.
+      security: [{adminSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '200':
+          description: The versions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [versions]
+                properties:
+                  versions:
+                    type: array
+                    items: {$ref: '#/components/schemas/ManifestVersion'}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/manifest/versions/{id}/activate:
+    post:
+      tags: [Manifest]
+      operationId: activateManifestVersion
+      summary: Roll back (or forward) to a version
+      description: |
+        Makes an existing version active again. The stored document is validated again with the
+        current rules. If it no longer passes the answer is `422` and nothing changes.
+      security: [{adminSignature: []}]
+      parameters:
+        - {name: id, in: path, required: true, description: "The version id.", schema: {type: integer, format: int64}}
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '200':
+          description: The version, now active.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ManifestVersion'}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/InvalidManifest'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/activity:
+    get:
+      tags: [Activity]
+      operationId: playerActivity
+      summary: The player feed
+      description: |
+        What the signed player's agents did, newest first. Sign it with the studio key. A `player`
+        or `tenant` query parameter is ignored, so a player can only read their own events. When more
+        remain, `next_before` is the value to pass as `before` for the next page.
+      security: [{studioSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+        - $ref: '#/components/parameters/FeedTool'
+        - $ref: '#/components/parameters/FeedOutcome'
+        - $ref: '#/components/parameters/FeedSince'
+        - $ref: '#/components/parameters/FeedLimit'
+        - $ref: '#/components/parameters/FeedBefore'
+      responses:
+        '200':
+          description: A page of events.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Feed'}
+              example:
+                events:
+                  - id: 42
+                    time: "2026-03-01T10:05:00Z"
+                    tool: sell_resource
+                    tier: medium
+                    outcome: denied
+                    code: daily_amount_cap
+                    args_sha256: 9f2c00
+                next_before: 41
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/admin/activity:
+    get:
+      tags: [Activity]
+      operationId: adminActivity
+      summary: The admin feed
+      description: |
+        Events of any player of the gateway's tenant. Sign it with the admin key. `X-AG-Player` is the
+        acting admin and is not a filter, use the `player` query parameter for that. Rows name the player.
+      security: [{adminSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+        - {name: player, in: query, required: false, description: "Only this player's events.", schema: {type: string}}
+        - $ref: '#/components/parameters/FeedTool'
+        - $ref: '#/components/parameters/FeedOutcome'
+        - $ref: '#/components/parameters/FeedSince'
+        - $ref: '#/components/parameters/FeedLimit'
+        - $ref: '#/components/parameters/FeedBefore'
+      responses:
+        '200':
+          description: A page of events.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Feed'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/relay/tickets:
+    post:
+      tags: [Relay]
+      operationId: mintRelayTicket
+      summary: Mint a relay ticket for a player's game client
+      description: |
+        The studio backend hands the ticket to the game client, which opens the WebSocket with it.
+        The signed `X-AG-Player` is the player. The ticket is signed with the relay secret and valid for
+        `--relay-ticket-ttl` (60 seconds by default). It can be reused until it expires, and a newer
+        socket for the same player replaces the older one. Not mounted unless `AGENTGW_RELAY_SECRET` is set.
+      security: [{studioSignature: []}]
+      parameters:
+        - $ref: '#/components/parameters/KeyId'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Player'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Signature'
+      responses:
+        '201':
+          description: The ticket.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RelayTicket'}
+              example: {ticket: eyJ0Ijoi, expires_at: "2026-01-02T03:05:05Z"}
+        '401': {$ref: '#/components/responses/InvalidClient'}
+        '413': {$ref: '#/components/responses/TooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/relay/connect:
+    get:
+      tags: [Relay]
+      operationId: relayConnect
+      summary: Open the game client's WebSocket
+      description: |
+        A WebSocket upgrade. The ticket is checked before the upgrade. One socket per player: a new
+        connection closes the old one with close code 4000. After the upgrade the gateway sends
+        `{"type":"hello","protocol":1}` and then `call` frames. The client answers each with a `result`
+        frame, see the relay section of docs/PROTOCOL.md.
+      security: [{relayTicket: []}]
+      parameters:
+        - {name: ticket, in: query, required: false, description: "The ticket, for clients that cannot set a header. The header wins when both are given.", schema: {type: string}}
+      responses:
+        '101': {description: "Switching protocols. The socket is open."}
+        '401':
+          description: The ticket is missing, tampered with or expired.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+              example: {error: invalid_ticket}
+  /.well-known/oauth-authorization-server:
+    get:
+      tags: [OAuth]
+      operationId: oauthMetadata
+      summary: Authorization server metadata (RFC 8414)
+      description: |
+        An MCP client finds the rest from here. The protected resource metadata at
+        `/.well-known/oauth-protected-resource/mcp` is served next to the MCP endpoint.
+      responses:
+        '200':
+          description: The metadata.
+          content:
+            application/json:
+              schema: {type: object, description: "RFC 8414 metadata. S256 PKCE, public clients, the code and refresh_token grants."}
+  /register:
+    post:
+      tags: [OAuth]
+      operationId: registerClient
+      summary: Dynamic client registration (RFC 7591)
+      description: Registers a public client. Rate limited per client address (`--register-per-hour`), and the number of clients is capped (`--max-clients`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_name, redirect_uris]
+              properties:
+                client_name: {type: string, maxLength: 100}
+                redirect_uris:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items: {type: string, maxLength: 2048}
+      responses:
+        '201':
+          description: The registered client.
+          content:
+            application/json:
+              schema: {type: object, description: "The client_id, echoed metadata and the supported grant types."}
+        '400': {description: "invalid_client_metadata or invalid_redirect_uri.", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '429': {description: "Too many registrations from this address. Retry-After says when.", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /authorize:
+    get:
+      tags: [OAuth]
+      operationId: authorizeForm
+      summary: The consent page
+      description: |
+        Shows the consent page where the player enters the link code and picks coach or operator.
+        Needs PKCE S256 and `response_type=code`. Errors are shown on the page or redirected to a verified redirect URI.
+      parameters:
+        - {name: response_type, in: query, required: true, description: "Must be `code`.", schema: {type: string}}
+        - {name: client_id, in: query, required: true, schema: {type: string}}
+        - {name: redirect_uri, in: query, required: true, schema: {type: string}}
+        - {name: code_challenge, in: query, required: true, description: "The S256 challenge.", schema: {type: string}}
+        - {name: code_challenge_method, in: query, required: true, description: "Must be `S256`.", schema: {type: string}}
+        - {name: state, in: query, required: false, schema: {type: string, maxLength: 512}}
+        - {name: scope, in: query, required: false, description: "Space separated, `coach` or `operator`.", schema: {type: string}}
+        - {name: resource, in: query, required: false, description: "The MCP resource URL the token is bound to.", schema: {type: string}}
+      responses:
+        '200': {description: "The consent page (HTML)."}
+        '400': {description: "The request is invalid (HTML or a redirect with an error)."}
+    post:
+      tags: [OAuth]
+      operationId: authorizeSubmit
+      summary: Submit the consent page
+      description: The player allows or denies, with a link code. Wrong, used and expired codes look the same. Every submission counts against a per-address limit.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: {type: string, description: '`allow` to grant, anything else denies.'}
+                scope_choice: {type: string, description: '`coach` or `operator`.'}
+                ticket: {type: string, description: "The link code from the game."}
+      responses:
+        '302': {description: "Redirect to the client's redirect URI with a code (or an error)."}
+        '401': {description: "The link code did not work (HTML)."}
+        '429': {description: "Too many attempts (HTML). Retry-After says when."}
+  /token:
+    post:
+      tags: [OAuth]
+      operationId: token
+      summary: Exchange a code or refresh a token
+      description: |
+        `authorization_code` exchanges the code with the PKCE verifier. `refresh_token` rotates the refresh
+        token. Reusing a rotated refresh token revokes the grant. Access tokens are opaque.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id]
+              properties:
+                grant_type: {type: string, description: '`authorization_code` or `refresh_token`.'}
+                client_id: {type: string}
+                code: {type: string}
+                redirect_uri: {type: string}
+                code_verifier: {type: string}
+                resource: {type: string}
+                refresh_token: {type: string}
+      responses:
+        '200':
+          description: The tokens.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Token'}
+        '400': {description: "invalid_request, invalid_grant or unsupported_grant_type.", content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    studioSignature:
+      type: apiKey
+      in: header
+      name: X-AG-Signature
+      description: |
+        HMAC-SHA256 request signing with the studio key. The five headers `X-AG-Key-Id`, `X-AG-Timestamp`,
+        `X-AG-Player`, `X-AG-Idempotency-Key` and `X-AG-Signature` are all required. The signed string and
+        the verifier rules are in docs/PROTOCOL.md. The timestamp must be within 5 minutes, and each
+        (key id, idempotency key) pair is accepted once. Go callers can use `pkg/agentsig`.
+    adminSignature:
+      type: apiKey
+      in: header
+      name: X-AG-Signature
+      description: |
+        The same scheme, signed with the admin key (`--admin-key-id`, secret `AGENTGW_ADMIN_SECRET`), which
+        must differ from the studio key. `X-AG-Player` names the acting admin.
+    relayTicket:
+      type: http
+      scheme: bearer
+      description: A relay ticket from `POST /v1/studio/relay/tickets`.
+  parameters:
+    KeyId:
+      {name: X-AG-Key-Id, in: header, required: true, description: "Which shared secret signed the request (supports rotation).", schema: {type: string}}
+    Timestamp:
+      {name: X-AG-Timestamp, in: header, required: true, description: "Unix seconds when the request was signed.", schema: {type: integer}}
+    Player:
+      {name: X-AG-Player, in: header, required: true, description: 'The player the call is for. For admin calls, the acting admin.', schema: {type: string}}
+    IdempotencyKey:
+      {name: X-AG-Idempotency-Key, in: header, required: true, description: "Unique per request. A repeated pair of key id and idempotency key is refused as a replay.", schema: {type: string}}
+    Signature:
+      {name: X-AG-Signature, in: header, required: true, description: "Lowercase hex HMAC-SHA256 of the signed string.", schema: {type: string}}
+    FeedTool:
+      {name: tool, in: query, required: false, description: "Only events of this tool.", schema: {type: string}}
+    FeedOutcome:
+      {name: outcome, in: query, required: false, description: "Only events with this outcome.", schema: {type: string, enum: [ok, denied, error]}}
+    FeedSince:
+      {name: since, in: query, required: false, description: "Only events at or after this time (RFC 3339).", schema: {type: string, format: date-time}}
+    FeedLimit:
+      {name: limit, in: query, required: false, description: 'Page size. Default 50, at most 200, larger values are clamped.', schema: {type: integer, minimum: 1}}
+    FeedBefore:
+      {name: before, in: query, required: false, description: 'A cursor: only events with a smaller id. Use `next_before` from the previous page.', schema: {type: integer, format: int64}}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string, description: 'A short code, see the errors reference.'}
+        error_description: {type: string, description: "Added by the OAuth endpoints and the link ticket endpoint."}
+        detail: {type: string, description: "Added to `invalid_manifest`. Lists every problem."}
+    Ticket:
+      type: object
+      required: [ticket, expires_at]
+      properties:
+        ticket: {type: string, description: "The code the player types on the consent page."}
+        expires_at: {type: string, format: date-time}
+    RelayTicket:
+      type: object
+      required: [ticket, expires_at]
+      properties:
+        ticket: {type: string, description: "Opaque signed ticket."}
+        expires_at: {type: string, format: date-time}
+    Grant:
+      type: object
+      required: [id, client_id, scope, resource, created_at]
+      properties:
+        id: {type: string}
+        client_id: {type: string}
+        client_name: {type: string, description: "Empty if the client is gone."}
+        scope: {type: string, enum: [coach, operator]}
+        resource: {type: string, description: "The MCP resource the grant is bound to."}
+        created_at: {type: string, format: date-time}
+    Confirmation:
+      type: object
+      required: [id, tool, state, created_at, expires_at, args_sha256]
+      properties:
+        id: {type: string}
+        tool: {type: string}
+        state: {type: string, description: "The confirmation's state, `pending` while it waits for the player."}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        args_sha256: {type: string, description: 'Hex SHA-256 of the validated arguments with keys sorted. Not for display: the gateway stores only the hash.'}
+    ManifestVersion:
+      type: object
+      required: [id, sha256, actor, created_at, tools, active]
+      properties:
+        id: {type: integer, format: int64}
+        sha256: {type: string, description: "Of the canonical JSON document."}
+        actor: {type: string, description: "Who uploaded it (the signed X-AG-Player of the admin call)."}
+        created_at: {type: string, format: date-time}
+        tools: {type: integer, description: "Number of tools."}
+        active: {type: boolean}
+    FeedEvent:
+      type: object
+      required: [id, time, tool, tier, outcome, args_sha256]
+      properties:
+        id: {type: integer, format: int64}
+        time: {type: string, format: date-time}
+        player: {type: string, description: "Admin feed only."}
+        tool: {type: string}
+        tier: {type: string}
+        outcome: {type: string, enum: [ok, denied, error]}
+        code: {type: string, description: "The result code of a denial or error."}
+        args_sha256: {type: string, description: "Hex SHA-256 of the validated arguments. The arguments are never stored."}
+    Feed:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items: {$ref: '#/components/schemas/FeedEvent'}
+        next_before: {type: integer, format: int64, description: "Pass as `before` for the next page. Omitted on the last page."}
+    Token:
+      type: object
+      required: [access_token, token_type, expires_in, refresh_token, scope]
+      properties:
+        access_token: {type: string}
+        token_type: {type: string, enum: [Bearer]}
+        expires_in: {type: integer, description: "Seconds."}
+        refresh_token: {type: string}
+        scope: {type: string, enum: [coach, operator]}
+  responses:
+    InvalidClient:
+      description: The signature is missing, wrong, stale, or the signed request was already used.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {error: invalid_client}
+    InvalidRequest:
+      description: A query parameter is malformed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {error: invalid_request}
+    NotFound:
+      description: Does not exist, expired, or belongs to someone else. The three look the same so ids cannot be probed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {error: not_found}
+    WrongState:
+      description: The confirmation cannot make that move, for example approving a denied one.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {error: wrong_state}
+    TooLarge:
+      description: The body is over the endpoint's limit.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {error: too_large}
+    InvalidManifest:
+      description: The manifest failed validation. Nothing changed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {error: invalid_manifest, detail: "manifest invalid:\n  - tools[0] (\"ab\"): description is required (the agent reads it)"}
+    Unavailable:
+      description: A store failed or the replay cache is full. Nothing changed. Retry with a new idempotency key.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+          example: {error: temporarily_unavailable}

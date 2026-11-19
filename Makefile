@@ -1,6 +1,10 @@
-.PHONY: all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses
+.PHONY: site-build site-check site-dev all build test vet fmt lint vuln clean docker-all docker-test docker-vet docker-fmt docker-lint docker-vuln docker-shell up down helm-check deploy-check release-check release-snapshot workflows-check licenses docs-gen
 
 all: fmt vet test build
+
+# Regenerate docs/reference from the code. A test fails when the committed pages are stale.
+docs-gen:
+	go run ./cmd/docgen
 
 build:
 	go build -o bin/ ./cmd/... ./examples/city/backend
@@ -79,3 +83,13 @@ release-snapshot:
 
 workflows-check:
 	docker compose run --rm actionlint
+
+# Project site (Astro Starlight), in a container: Node is never installed on the host.
+site-build:
+	docker compose run --rm site build
+
+site-check:
+	docker compose run --rm site check
+
+site-dev:
+	docker compose run --rm --service-ports site dev

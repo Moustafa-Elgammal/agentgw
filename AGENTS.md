@@ -19,9 +19,13 @@ docker compose run --rm dev make vuln      # govulncheck
 docker compose run --rm dev bash           # shell in the toolchain container
 docker compose run --rm dev go run ./cmd/gwctl validate examples/city/manifest.json
 
+docker compose run --rm site check          # project site (site/): build, warnings are errors, link check
+docker compose run --rm site dev            # preview at http://127.0.0.1:4321/agentgw/
 docker compose up --build                  # gateway (dev API on 127.0.0.1:8080) + fake city backend
 docker compose down
 ```
+
+Site: `site/` is Astro Starlight and reads `docs/` (`site/scripts/sync-docs.mjs`); never edit `site/src/content/docs/` except `index.mdx` and `404.md`. Manifest examples in docs use a ```` ```json manifest ```` fence and are validated by `go test ./test/docs`. `make site-build site-check site-dev`.
 
 Shortcuts: `make docker-test`, `docker-vet`, `docker-fmt`, `docker-lint`, `docker-vuln`,
 `docker-shell`, `up`, `down` (these call the compose commands above).

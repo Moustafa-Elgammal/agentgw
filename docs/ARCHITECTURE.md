@@ -44,6 +44,7 @@ internal/httpapi   dev-only JSON front door (also the player's approve and deny 
 internal/mcpserver MCP front door (streamable HTTP, stateless, per-request principal)
 pkg/agentsig       request signing and verification (importable by Go backends)
 examples/city      example manifest and a fake backend
+site               project site and docs (Astro Starlight, built in a container, reads docs/); test/docs validates manifest examples in the docs
 ```
 
 Planned: tracing.

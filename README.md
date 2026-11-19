@@ -79,6 +79,8 @@ The full component list is in [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Docs
 
+- [Overview](docs/get-started/overview.md), [quickstart](docs/get-started/quickstart.md) and [connect an agent](docs/get-started/connect-an-agent.md)
+- Concepts: [how a call flows](docs/concepts/pipeline.md), [tiers and policy](docs/concepts/tiers-and-policy.md), [players, grants and confirmations](docs/concepts/players-grants-confirmations.md)
 - [Architecture](docs/ARCHITECTURE.md) and [features](docs/FEATURES.md)
 - [Manifest](docs/MANIFEST.md)
 - [Signed request protocol](docs/PROTOCOL.md)

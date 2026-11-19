@@ -1,0 +1,286 @@
+{
+  "$defs": {
+    "caps": {
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "per_day_amount": {
+            "minimum": 1
+          }
+        },
+        "required": [
+          "per_day_amount"
+        ]
+      },
+      "properties": {
+        "amount_param": {
+          "type": "string"
+        },
+        "cooldown_seconds": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "per_day_amount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "per_day_calls": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "then": {
+        "required": [
+          "amount_param"
+        ]
+      },
+      "type": "object"
+    },
+    "http": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "enum": [
+            "DELETE",
+            "GET",
+            "PATCH",
+            "POST",
+            "PUT",
+            ""
+          ],
+          "type": "string"
+        },
+        "url": {
+          "pattern": "^(/.*)?$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "param": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "enum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "const": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "anyOf": [
+              {
+                "required": [
+                  "min"
+                ]
+              },
+              {
+                "required": [
+                  "max"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "integer",
+                  "number"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "enum": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "max": {
+          "type": "integer"
+        },
+        "min": {
+          "type": "integer"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "boolean",
+            "integer",
+            "number",
+            "string"
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "tool": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "http": {
+                "properties": {
+                  "method": {
+                    "minLength": 1
+                  },
+                  "url": {
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "method",
+                  "url"
+                ]
+              }
+            },
+            "required": [
+              "http"
+            ]
+          },
+          "if": {
+            "properties": {
+              "backend": {
+                "const": "relay"
+              }
+            },
+            "required": [
+              "backend"
+            ]
+          },
+          "then": {
+            "properties": {
+              "http": {
+                "properties": {
+                  "method": {
+                    "maxLength": 0
+                  },
+                  "url": {
+                    "maxLength": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tier": {
+                "const": "read"
+              }
+            },
+            "required": [
+              "tier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "caps": {
+                "properties": {
+                  "per_day_amount": {
+                    "maximum": 0
+                  },
+                  "per_day_calls": {
+                    "maximum": 0
+                  }
+                }
+              },
+              "confirm": {
+                "const": false
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "backend": {
+          "enum": [
+            "http",
+            "relay"
+          ]
+        },
+        "caps": {
+          "$ref": "#/$defs/caps"
+        },
+        "confirm": {
+          "type": "boolean"
+        },
+        "description": {
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "http": {
+          "$ref": "#/$defs/http"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/param"
+          },
+          "type": "object"
+        },
+        "tier": {
+          "enum": [
+            "read",
+            "safe",
+            "medium",
+            "sensitive"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "tier"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/Moustafa-Elgammal/agentgw/docs/reference/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Generated by make docs-gen from the manifest validator. Do not edit.",
+  "properties": {
+    "game": {
+      "type": "string"
+    },
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/tool"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "version",
+    "tools"
+  ],
+  "title": "agentgw manifest",
+  "type": "object"
+}

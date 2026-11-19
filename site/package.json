@@ -1,0 +1,21 @@
+{
+  "name": "agentgw-site",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Project site and documentation for agentgw. Built in a container; see site/entrypoint.sh.",
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "og": "node scripts/make-og.mjs",
+    "dev": "npm run --silent sync && astro dev --host 0.0.0.0",
+    "build": "npm run --silent sync && npm run --silent og && astro build",
+    "check": "node scripts/check.mjs",
+    "check-external": "node scripts/check-external.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.43.1",
+    "astro": "7.4.13",
+    "sharp": "0.35.5",
+    "starlight-links-validator": "0.27.0"
+  }
+}

@@ -13,6 +13,9 @@ const (
 	TierSensitive Tier = "sensitive" // paid currency, gifts, deletion; disabled in v1
 )
 
+// Tiers lists every valid tier, from least to most risky.
+var Tiers = []Tier{TierRead, TierSafe, TierMedium, TierSensitive}
+
 // Valid reports whether t is a known tier.
 func (t Tier) Valid() bool {
 	switch t {

@@ -232,7 +232,7 @@ Events come newest first. When more remain, the response carries `next_before`: 
 `before` to get the next page. It is omitted on the last page.
 
 ```json
-{"events":[{"id":42,"time":"2026-03-01T10:05:00Z","tool":"sell_resource","tier":"action","outcome":"denied","code":"daily_amount_cap","args_sha256":"9f2c..."}],"next_before":41}
+{"events":[{"id":42,"time":"2026-03-01T10:05:00Z","tool":"sell_resource","tier":"medium","outcome":"denied","code":"daily_amount_cap","args_sha256":"9f2c..."}],"next_before":41}
 ```
 
 An admin row also has `"player":"alice"`. `outcome` and `code` are the audit event's: `ok`,

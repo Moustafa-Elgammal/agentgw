@@ -1,5 +1,7 @@
 # Features and components
 
+New here? Start with the [overview](get-started/overview.md), the [quickstart](get-started/quickstart.md) and [how a call flows](concepts/pipeline.md).
+
 What is built today and where it lives in the code. The roadmap is in [ROADMAP.md](ROADMAP.md).
 
 | Piece | Where |

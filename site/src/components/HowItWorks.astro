@@ -1,0 +1,51 @@
+---
+// Inline SVG, so it follows the light and dark theme and diffs as text.
+---
+<div class="gw-diagram">
+  <svg viewBox="0 0 960 330" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="gw-d-title gw-d-desc">
+    <title id="gw-d-title">How a tool call flows through the gateway</title>
+    <desc id="gw-d-desc">An agent calls a tool over MCP. The gateway checks the call in eight steps: lookup, rate limit, validate, confirm, reserve, signed call, settle, audit. It sends a signed request to the studio backend.</desc>
+
+    <rect class="box" x="8" y="104" width="168" height="124" rx="12"/>
+    <text class="label" x="92" y="150" text-anchor="middle">Player's agent</text>
+    <text class="small" x="92" y="172" text-anchor="middle">any MCP client</text>
+    <text class="small" x="92" y="192" text-anchor="middle">Coach or Operator</text>
+
+    <rect class="accent" x="224" y="44" width="512" height="244" rx="14"/>
+    <text class="label" x="480" y="82" text-anchor="middle">agentgw</text>
+    <text class="small" x="480" y="102" text-anchor="middle">tools come from the studio's manifest</text>
+    <rect class="step" x="252" y="128" width="96" height="44" rx="8"/>
+    <text class="stepText" x="300.0" y="155" text-anchor="middle">1. lookup</text>
+    <path class="line" d="M351 150h16"/><path class="head" d="M368 150l-6 -4v8z"/>
+    <rect class="step" x="372" y="128" width="96" height="44" rx="8"/>
+    <text class="stepText" x="420.0" y="155" text-anchor="middle">2. rate limit</text>
+    <path class="line" d="M471 150h16"/><path class="head" d="M488 150l-6 -4v8z"/>
+    <rect class="step" x="492" y="128" width="96" height="44" rx="8"/>
+    <text class="stepText" x="540.0" y="155" text-anchor="middle">3. validate</text>
+    <path class="line" d="M591 150h16"/><path class="head" d="M608 150l-6 -4v8z"/>
+    <rect class="step" x="612" y="128" width="96" height="44" rx="8"/>
+    <text class="stepText" x="660.0" y="155" text-anchor="middle">4. confirm</text>
+    <rect class="step" x="252" y="204" width="96" height="44" rx="8"/>
+    <text class="stepText" x="300.0" y="231" text-anchor="middle">5. reserve</text>
+    <path class="line" d="M351 226h16"/><path class="head" d="M368 226l-6 -4v8z"/>
+    <rect class="step" x="372" y="204" width="96" height="44" rx="8"/>
+    <text class="stepText" x="420.0" y="231" text-anchor="middle">6. signed call</text>
+    <path class="line" d="M471 226h16"/><path class="head" d="M488 226l-6 -4v8z"/>
+    <rect class="step" x="492" y="204" width="96" height="44" rx="8"/>
+    <text class="stepText" x="540.0" y="231" text-anchor="middle">7. settle</text>
+    <path class="line" d="M591 226h16"/><path class="head" d="M608 226l-6 -4v8z"/>
+    <rect class="step" x="612" y="204" width="96" height="44" rx="8"/>
+    <text class="stepText" x="660.0" y="231" text-anchor="middle">8. audit</text>
+    <text class="small" x="480" y="273" text-anchor="middle">Every attempt is audited, allowed or denied. A denial tells the agent why.</text>
+
+    <rect class="box" x="784" y="104" width="168" height="124" rx="12"/>
+    <text class="label" x="868" y="150" text-anchor="middle">Studio backend</text>
+    <text class="small" x="868" y="172" text-anchor="middle">any language</text>
+    <text class="small" x="868" y="192" text-anchor="middle">or the game client</text>
+
+    <path class="line" d="M178 166h38"/><path class="head" d="M222 166l-8 -5v10z"/>
+    <path class="line" d="M740 166h36"/><path class="head" d="M782 166l-8 -5v10z"/>
+    <text class="small" x="197" y="154" text-anchor="middle">MCP</text>
+    <text class="small" x="760" y="154" text-anchor="middle">signed call</text>
+  </svg>
+</div>
