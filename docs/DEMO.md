@@ -1,0 +1,28 @@
+# Recording the terminal demo
+
+`scripts/demo.sh` plays a 60 second demo for the landing page. It starts the compose demo, types
+each command, runs it for real and shows a read, a sale, a daily cap refusal and a cooldown.
+
+Check the script first without pauses: `DEMO_FAST=1 scripts/demo.sh`.
+
+## Record
+
+Use a terminal about 100 columns by 28 rows with a large font, and stop anything on port 8080.
+
+```bash
+brew install asciinema agg          # or: pipx install asciinema
+asciinema rec demo.cast --cols 100 --rows 28 -c scripts/demo.sh
+agg --font-size 18 demo.cast demo.gif
+```
+
+`demo.cast` plays on asciinema.org (`asciinema upload demo.cast`) and `demo.gif` embeds in the README
+and in posts. Keep the GIF under 2 MB; if it is larger, lower `--font-size` or `--speed` to 1.2.
+
+Alternative with [VHS](https://github.com/charmbracelet/vhs): a tape that runs `scripts/demo.sh`
+and sets `Set Width 1100`, `Set Height 600`, `Set FontSize 18`, then `Sleep 70s`.
+
+## After recording
+
+Put the GIF at `site/public/demo.gif`, show it at the top of the site's landing page and add
+`![agentgw demo](https://github.com/Moustafa-Elgammal/agentgw/raw/main/site/public/demo.gif)` under
+the first paragraph of the README. Then tick the demo item in `docs/LAUNCH-CHECKLIST.md`.

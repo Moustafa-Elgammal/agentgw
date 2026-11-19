@@ -7,6 +7,10 @@
 
 **An open-source gateway that lets a player's own AI agent act safely inside a game.**
 
+Players are starting to bring their own AI agents. A studio that lets them in needs limits the
+agent cannot talk its way past: caps, cooldowns, confirmations and an off switch. agentgw puts
+those limits in one place, in front of your existing backend, with no change to your game code.
+
 A game studio describes its game actions in a manifest. The gateway turns them into
 [MCP](https://modelcontextprotocol.io) tools, applies safety policy (tiers, rate limits,
 daily caps, cooldowns, kill switches, player confirmations), calls the studio's backend with a
@@ -37,6 +41,10 @@ curl -s -X POST -H 'X-Dev-Player: p1' \
 
 docker compose down
 ```
+
+You should see `{"ok":true,"data":{"coins":600,"earned":100}}`. Ask for more than the daily cap
+and you get `{"ok":false,"code":"daily_amount_cap",...}` instead. To watch it happen in about a
+minute, run `scripts/demo.sh` (how to record it: [docs/DEMO.md](docs/DEMO.md)).
 
 An expected failure comes back as a result with a machine-readable `code` and a hint, for
 example `invalid_arguments`, `rate_limited`, `daily_amount_cap`, `cooldown` or `switched_off`.
