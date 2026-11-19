@@ -375,6 +375,23 @@ The soak script does the whole thing, including a clean stack and resource sampl
 DURATION=1h RATE=100 PLAYERS=2000 scripts/soak.sh
 ```
 
+Reference result, one hour at 100 calls per second, 32 workers and 2000 players, on a laptop with
+Docker Compose, one gateway, Redis, Postgres and the fake backend on the same machine:
+
+| Measure | Result |
+|---|---|
+| Calls | 359,763 (287,870 succeeded, 71,892 denied by the fake backend, 1 failed) |
+| Latency p50, p95, p99 | 1.9 ms, 4.4 ms, 6.5 ms (slowest call 202 ms) |
+| Gateway memory | 15 to 19 MiB after warm-up, no sustained growth |
+| Gateway CPU | 7 to 14 percent of one core |
+| Redis keys | 4,000, which is two per simulated player |
+| Postgres sessions | 14, flat for the second half: the gateway's pool at its cap of 8 plus Postgres's own 6 |
+| `/readyz` | 200 in all 97 samples |
+
+Read your own run against these. The numbers show what the gateway adds, not what a real game
+backend costs. The Postgres container's memory kept rising during the run (27 to 154 MiB), which
+is what the audit write path note (`docs/design/audit-write-path.md`) is about.
+
 It starts the compose stack under its own project name, runs the load tool, and samples the
 gateway, Redis and Postgres every 30 seconds (memory, Redis keys, Postgres connections, CPU,
 `/readyz`). It writes `soak-results/<time>/` with `load.txt`, `samples.csv` and `summary.txt`, and
