@@ -49,6 +49,7 @@ oidc:
   playerClaim: sub      # a claim that is stable for a person for ever and equals your player id
   scopes: openid
   algs: "RS256,ES256"   # asymmetric only
+  publicClient: false   # true: the client is registered without a secret (PKCE only); then leave oidc-client-secret out
 
 # Seed manifest, used only when the manifest store has no active version. After that the store
 # (uploads through /v1/studio/manifest) is the source of truth. Give the manifest inline, or
@@ -65,7 +66,7 @@ existingManifestConfigMap: ""
 #   admin-secret    optional   AGENTGW_ADMIN_SECRET (mounts the manifest and admin feed endpoints)
 #   relay-secret    optional   AGENTGW_RELAY_SECRET (enables the relay)
 #   postgres-url    optional   AGENTGW_POSTGRES_URL
-#   oidc-client-secret   required when oidc.issuer is set   AGENTGW_OIDC_CLIENT_SECRET
+#   oidc-client-secret   required when oidc.issuer is set (not with publicClient)   AGENTGW_OIDC_CLIENT_SECRET
 #   oidc-session-secret  required when oidc.issuer is set   AGENTGW_OIDC_SESSION_SECRET (32 bytes or more)
 existingSecret: ""
 
