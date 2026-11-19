@@ -2,8 +2,7 @@
 // Charts for the soak run in site/src/data/soak.json (written by scripts/bench-report.py).
 // Inline SVG, drawn at build time, so there is no chart library and the page works without
 // JavaScript. Each point has a native tooltip, and every chart has a table behind it.
-const files = import.meta.glob('../data/soak.json', { eager: true }) as Record<string, { default: any }>;
-const d = Object.values(files)[0]?.default;
+import d from '../data/soak.json';
 
 const nice = (max: number) => {
   const p = 10 ** Math.floor(Math.log10(max || 1));
@@ -110,7 +109,7 @@ const latMax = d ? nice(Math.max(...lat.map((l) => l.v)) * 1.1) : 1;
       instantly, so the figures show what the gateway adds (policy, validation, signing, audit and the
       Redis and Postgres round trips), not what your game's own backend will cost. {fmt(d.denied)} calls were
       denied on purpose by the demo's limits and the fake backend, and are not failures. Repeat it yourself with
-      <code>scripts/soak.sh</code>, described in the <a href={`${import.meta.env.BASE_URL}operate/runbook/`}>runbook</a>.
+      <code>scripts/soak.sh</code>, described in the <a href={`${Astro.url.pathname}operate/runbook/`}>runbook</a>.
     </p>
   </div>
 ) : (
