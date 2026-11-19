@@ -372,18 +372,18 @@ func main() {
 				}
 			})
 			cs, as := pgstore.New(pool, nil), authpg.New(pool, nil)
-			if err = cs.Migrate(ctx); err == nil {
-				err = as.Migrate(ctx)
-			}
 			ms := mspg.New(pool, nil)
-			if err == nil {
-				err = ms.Migrate(ctx)
-			}
 			aus := auditpg.New(pool)
 			aus.OnError = func(err error) { log.Error("audit store write failed", "err", err) }
-			if err == nil {
-				err = aus.Migrate(ctx)
-			}
+			// One migration at a time across replicas (see withMigrationLock).
+			err = withMigrationLock(ctx, pool, func() error {
+				for _, m := range []func(context.Context) error{cs.Migrate, as.Migrate, ms.Migrate, aus.Migrate} {
+					if err := m(ctx); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
 			if err == nil {
 				confirmations, authStore, manifests, auditStore = cs, as, ms, aus
 				defer pool.Close()
